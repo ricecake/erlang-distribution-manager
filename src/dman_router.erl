@@ -1,50 +1,78 @@
+%% Simple epidemic based protocol. Gossips an ever increasing epoch
+%% value around the cluster
+%%
+%% Usage:
+%%
+%%   (a@machine1)> gen_gossip_epidemic:start_link().
+%%   (b@machine1)> gen_gossip_epidemic:start_link().
+%%   (b@machine1)> net_adm:ping('a@machine1').
+%%
 -module(dman_router).
--behaviour(gen_server).
--define(SERVER, ?MODULE).
+-behaviour(gen_gossip).
 
-%% ------------------------------------------------------------------
-%% API Function Exports
-%% ------------------------------------------------------------------
+%% api
+-export([start_link/0, handle_cast/2, code_change/3]).
 
--export([start_link/0]).
+%% gen_gossip callbacks
+-export([init/1,
+         gossip_freq/1,
+         digest/1,
+         join/2,
+         expire/2,
+         handle_gossip/4]).
 
-%% ------------------------------------------------------------------
-%% gen_server Function Exports
-%% ------------------------------------------------------------------
+-record(state, {
+    epoch = 0,
+    data  = undef
+}).
 
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
-
-%% ------------------------------------------------------------------
-%% API Function Definitions
-%% ------------------------------------------------------------------
+%%%===================================================================
+%%% API
+%%%===================================================================
 
 start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+    gen_gossip:register_handler(?MODULE, [], epidemic).
 
-%% ------------------------------------------------------------------
-%% gen_server Function Definitions
-%% ------------------------------------------------------------------
+%%%===================================================================
+%%% gen_gossip callbacks
+%%%===================================================================
 
-init(Args) ->
-    {ok, Args}.
+init([]) ->
+    {ok, #state{}}.
 
-handle_call(_Request, _From, State) ->
-    {reply, ok, State}.
+% how often do we want to send a message? in milliseconds.
+gossip_freq(State) ->
+    {reply, 500, State}.
 
-handle_cast(_Msg, State) ->
+% defines what we're gossiping
+digest(#state{epoch=Epoch0, data=Data} = State) ->
+    HandleToken = push,
+    {Mega, Secs, Micro} = erlang:now(),  
+    Stamp = Mega*1000*1000*1000*1000 + Secs * 1000 * 1000 + Micro,
+    io:format("~p: ~p~n", [Stamp, State#state.data]),
+    {reply, {Epoch0, Data}, HandleToken, State}.
+
+handle_cast(Message, #state{epoch = Epoch} = State) ->
+	{noreply, State#state{epoch = Epoch+1, data=Message}}.
+% received a push
+handle_gossip(push, {Epoch, Message}, _From, State) when Epoch >= State#state.epoch ->
+	    {noreply, State#state{epoch=Epoch, data=Message}};
+handle_gossip(push, _Epoch, _From, State) ->
+	{reply, {State#state.epoch, State#state.data }, _HandleToken = pull, State};
+
+
+% received a symmetric push
+handle_gossip(pull, {Epoch, Data}, _From, State) ->
+    {noreply, State#state{epoch=Epoch, data=Data}}.
+
+% joined cluster
+join(Nodelist, State) ->
+	io:format("JOIN: ~p~n",[Nodelist]),
     {noreply, State}.
 
-handle_info(_Info, State) ->
+% node left
+expire(Node, State) ->
+	io:format("LEAVE: ~p~n",[Node]),
     {noreply, State}.
 
-terminate(_Reason, _State) ->
-    ok.
-
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
-
-%% ------------------------------------------------------------------
-%% Internal Function Definitions
-%% ------------------------------------------------------------------
-
+code_change(_Oldvsn, State, Extra) -> io:format("~p~n",[{State, Extra}]), {ok, State}.
