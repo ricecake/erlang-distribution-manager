@@ -6,7 +6,7 @@
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([start_link/0]).
+-export([start_link/0, behaviour_info/1]).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Exports
@@ -22,6 +22,18 @@
 start_link() ->
     gen_server:start_link(?MODULE, [], []).
 
+
+behaviour_info(callbacks) -> 
+	[
+		{add_task, 2},
+		{remove_task, 2},
+		{list_tasks, 2},
+
+		{init, 2},
+		{terminate,2},
+		{code_change,3}
+	];
+behaviour_info(_Other) -> undefined.
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------

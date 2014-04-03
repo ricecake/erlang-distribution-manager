@@ -21,6 +21,8 @@
          expire/2,
          handle_gossip/4]).
 
+-define(HASH_RING_FUNCTION_MD5, 2).
+
 -record(state, {
     epoch = 0,
     data  = undef
@@ -38,7 +40,9 @@ start_link() ->
 %%%===================================================================
 
 init([]) ->
-    {ok, #state{}}.
+	hash_ring:create_ring(<<"buckets">>, 128, ?HASH_RING_FUNCTION_MD5),
+	hash_ring:create_ring(<<"nodes">>, 128, ?HASH_RING_FUNCTION_MD5),
+	{ok, #state{}}.
 
 % how often do we want to send a message? in milliseconds.
 gossip_freq(State) ->
