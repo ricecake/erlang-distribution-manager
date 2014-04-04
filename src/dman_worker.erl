@@ -29,6 +29,8 @@ behaviour_info(callbacks) ->
 		{remove_task, 2},
 		{list_tasks, 2},
 
+		{get_status, 2},
+
 		{add_cohort, 2},
 		{remove_cohort,2},
 
