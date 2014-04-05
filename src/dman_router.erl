@@ -26,7 +26,21 @@
 -record(state, {
     epoch = 0,
     data  = undef
+
+    nodes = [],
+    buckets = [],
+    systems = []
 }).
+
+% nodes = [{node, {epoch, 
+%		[
+%		  {buckets, []}, 
+%		  {peers, [{node, statusPerception}]},
+%                 {systems, [{system, state}]}
+%		]}
+%	 }]
+% buckets = [ {bucket, {epoch, [{nodes, []}]}}]
+% systems = [{system, state}]
 
 %%%===================================================================
 %%% API
@@ -51,9 +65,6 @@ gossip_freq(State) ->
 % defines what we're gossiping
 digest(#state{epoch=Epoch0, data=Data} = State) ->
     HandleToken = push,
-    {Mega, Secs, Micro} = erlang:now(),  
-    Stamp = Mega*1000*1000*1000*1000 + Secs * 1000 * 1000 + Micro,
-    io:format("~p: ~p~n", [Stamp, State#state.data]),
     {reply, {Epoch0, Data}, HandleToken, State}.
 
 handle_cast(Message, #state{epoch = Epoch} = State) ->
