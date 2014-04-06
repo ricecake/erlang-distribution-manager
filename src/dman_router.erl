@@ -25,22 +25,23 @@
 
 -record(state, {
     epoch = 0,
-    data  = undef,
-
-    nodes = [],
+    peers = [],
     buckets = [],
-    systems = []
+    systems = [],
+    localBuckets = [],
+    stateData = []
 }).
 
-% nodes = [{node, {epoch, 
+% stateData = [{node, {epoch, 
 %		[
 %		  {buckets, []}, 
 %		  {peers, [{node, statusPerception}]},
 %                 {systems, [{system, state}]}
 %		]}
 %	 }]
-% buckets = [ {bucket, {epoch, [{nodes, []}]}}]
-% systems = [{system, state}]
+% peers = [{node, statusPerception}]
+% buckets = [ {bucket, {epoch, []}}]
+% systems = [system]
 
 %%%===================================================================
 %%% API
@@ -55,30 +56,38 @@ start_link() ->
 
 init([]) ->
 	hash_ring:create_ring(<<"buckets">>, 128, ?HASH_RING_FUNCTION_MD5),
+	Buckets = [binary:encode_unsigned(Bucket) || Bucket <- lists:seq(0,128)],
+	[hash_ring:add_node(<<"buckets">>, binary:encode_unsigned(Bucket)) || Bucket <- Buckets],
 	hash_ring:create_ring(<<"nodes">>, 128, ?HASH_RING_FUNCTION_MD5),
-	{ok, #state{}}.
+	hash_ring:add_node(<<"nodes">>, erlang:atom_to_binary(node(), latin1)),
+	NodeState = {node(), {0, [{buckets, Buckets},{peers, []},{systems, []}]}},
+	{ok, #state{stateData=[NodeState], localBuckets=Buckets, buckets=[{Bucket, {0, [node()]}} || Bucket <- Buckets] }}.
 
 % how often do we want to send a message? in milliseconds.
 gossip_freq(State) ->
     {reply, 500, State}.
 
 % defines what we're gossiping
-digest(#state{epoch=Epoch0, data=Data} = State) ->
-    HandleToken = push,
-    {reply, {Epoch0, Data}, HandleToken, State}.
+digest(#state{epoch=Epoch, systems=Systems, localBuckets=Buckets, buckets=BucketData, peers=Peers, stateData=StateData} = State) ->
+	NewEpoch = Epoch+1,
+	HandleToken = push,
+	Status = [{System, dman_worker:get_state(System)} || System <- Systems],
+	NodeState = {node(), {NewEpoch, [{buckets, Buckets},{peers, Peers},{systems, Status}]}},
+	NewStateData = lists:keystore(node(), 1, StateData, NodeState),
+	{reply, {NewEpoch, NewStateData, BucketData}, HandleToken, State#state{epoch=NewEpoch, stateData=NewStateData}}.
 
-handle_cast(Message, #state{epoch = Epoch} = State) ->
-	{noreply, State#state{epoch = Epoch+1, data=Message}}.
+handle_cast(_Message, #state{epoch = Epoch} = State) ->
+	{noreply, State#state{epoch = Epoch+1}}.
 % received a push
-handle_gossip(push, {Epoch, Message}, _From, State) when Epoch >= State#state.epoch ->
-	    {noreply, State#state{epoch=Epoch, data=Message}};
+handle_gossip(push, {Epoch}, _From, State) when Epoch >= State#state.epoch ->
+	    {noreply, State#state{epoch=Epoch}};
 handle_gossip(push, _Epoch, _From, State) ->
-	{reply, {State#state.epoch, State#state.data }, _HandleToken = pull, State};
+	{reply, {State#state.epoch}, _HandleToken = pull, State};
 
 
 % received a symmetric push
-handle_gossip(pull, {Epoch, Data}, _From, State) ->
-    {noreply, State#state{epoch=Epoch, data=Data}}.
+handle_gossip(pull, {Epoch}, _From, State) ->
+    {noreply, State#state{epoch=Epoch}}.
 
 % joined cluster
 join(Nodelist, State) ->
