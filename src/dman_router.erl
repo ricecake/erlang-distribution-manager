@@ -25,7 +25,7 @@
 
 -record(state, {
     epoch = 0,
-    data  = undef
+    data  = undef,
 
     nodes = [],
     buckets = [],
@@ -91,3 +91,17 @@ expire(Node, State) ->
     {noreply, State}.
 
 code_change(_Oldvsn, State, Extra) -> io:format("~p~n",[{State, Extra}]), {ok, State}.
+
+mergeState({MyEpoch, MyNodes, MyBuckets},{FEpoch, FNodes, FBuckets}) ->
+	NewEpoch   = lists:max([MyEpoch, FEpoch])+1,
+	NewNodes   = mergeList(MyNodes,   FNodes),
+	NewBuckets = mergeList(MyBuckets, FBuckets),
+	{NewEpoch, NewNodes, NewBuckets}.
+
+mergeList(MyList, FList) ->
+	Sort = fun({AName,{AEpoch, _AList}},{BName, {BEpoch, _BList}}) when AName == BName -> 
+		AEpoch >= BEpoch; 
+	          ({AName,{_AEpoch, _AList}},{BName, {_BEpoch, _BList}}) -> BName >= AName
+	end,
+	MergedList = lists:merge(Sort, lists:sort(Sort, MyList),lists:sort(Sort, FList)),
+	lists:usort(fun({A,_}, {B,_})-> B>=A end, MergedList).
