@@ -8,6 +8,7 @@
 
 -export([start_link/0, behaviour_info/1]).
 
+-export([add_task/2, remove_task/2, list_tasks/3, get_status/3, add_cohort/2, remove_cohort/2]).
 %% ------------------------------------------------------------------
 %% gen_server Function Exports
 %% ------------------------------------------------------------------
