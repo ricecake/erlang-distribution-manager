@@ -79,14 +79,17 @@ digest(#state{epoch=Epoch, systems=Systems, localBuckets=Buckets, buckets=Bucket
 handle_cast(_Message, #state{epoch = Epoch} = State) ->
 	{noreply, State#state{epoch = Epoch+1}}.
 % received a push
-handle_gossip(push, {Epoch}, _From, State) when Epoch >= State#state.epoch ->
+handle_gossip(push, {Epoch}, From, State) when Epoch >= State#state.epoch ->
+	Node = node(From),
 	    {noreply, State#state{epoch=Epoch}};
-handle_gossip(push, _Epoch, _From, State) ->
+handle_gossip(push, _Epoch, From, State) ->
+	Node = node(From),
 	{reply, {State#state.epoch}, _HandleToken = pull, State};
 
 
 % received a symmetric push
-handle_gossip(pull, {Epoch}, _From, State) ->
+handle_gossip(pull, {Epoch}, From, State) ->
+	Node = node(From),
     {noreply, State#state{epoch=Epoch}}.
 
 % joined cluster
