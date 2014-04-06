@@ -93,14 +93,14 @@ handle_gossip(pull, {Epoch}, From, State) ->
     {noreply, State#state{epoch=Epoch}}.
 
 % joined cluster
-join(Nodelist, State) ->
-	io:format("JOIN: ~p~n",[Nodelist]),
-    {noreply, State}.
+join(Nodelist, #state{peers=Peers, epoch=Epoch} = State) ->
+	NewPeers = lists:foldl(fun(Node, List)-> lists:keystore(Node, 1, List, {Node, 'UP'}) end, Peers, Nodelist),
+	{noreply, State#state{peers=NewPeers, epoch=Epoch+1}}.
 
 % node left
-expire(Node, State) ->
-	io:format("LEAVE: ~p~n",[Node]),
-    {noreply, State}.
+expire(Node, #state{peers=Peers, epoch=Epoch} = State) ->
+	NewPeers = lists:keystore(Node, 1, Peers, {Node, 'DOWN'}),
+	{noreply, State#state{peers=NewPeers, epoch=Epoch+1}}.
 
 code_change(_Oldvsn, State, Extra) -> io:format("~p~n",[{State, Extra}]), {ok, State}.
 
