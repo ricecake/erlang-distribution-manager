@@ -8,7 +8,7 @@
 
 -export([start_link/0, behaviour_info/1]).
 
--export([add_task/2, remove_task/2, list_tasks/3, get_status/3, add_cohort/2, remove_cohort/2]).
+-export([add_task/2, remove_task/2, list_tasks/3, get_status/3, add_cohort/2, remove_cohort/2, call/3, cast/2]).
 %% ------------------------------------------------------------------
 %% gen_server Function Exports
 %% ------------------------------------------------------------------
@@ -43,6 +43,16 @@ behaviour_info(callbacks) ->
 		{handle_info,2}
 	];
 behaviour_info(_Other) -> undefined.
+
+add_task(_,_) -> undef.
+remove_task(_,_) -> undef.
+list_tasks(_,_,_) -> undef.
+get_status(_,_,_) -> undef.
+add_cohort(_,_) -> undef.
+remove_cohort(_,_) -> undef.
+call(_,_,_) -> undef.
+cast(_,_) -> undef.
+
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------
