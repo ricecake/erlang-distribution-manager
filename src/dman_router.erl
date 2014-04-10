@@ -79,18 +79,16 @@ digest(#state{epoch=Epoch, systems=Systems, localBuckets=Buckets, buckets=Bucket
 handle_cast(_Message, #state{epoch = Epoch} = State) ->
 	{noreply, State#state{epoch = Epoch+1}}.
 % received a push
-handle_gossip(push, {Epoch}, From, State) when Epoch >= State#state.epoch ->
-	Node = node(From),
-	    {noreply, State#state{epoch=Epoch}};
-handle_gossip(push, _Epoch, From, State) ->
-	Node = node(From),
-	{reply, {State#state.epoch}, _HandleToken = pull, State};
+handle_gossip(push, TheirState, From, #state{epoch=MyEpoch, stateData=MyStateData, buckets=MyBuckets} = State) ->
+	MergedState = mergeState({MyEpoch, MyStateData, MyBuckets}, TheirState),
+	{NewEpoch, NewState, NewBuckets} = MergedState,
+	_Node = node(From),
+	{reply, MergedState, pull, State#state{epoch=NewEpoch, stateData=NewState, buckets=NewBuckets}};
 
 
 % received a symmetric push
-handle_gossip(pull, {Epoch}, From, State) ->
-	Node = node(From),
-    {noreply, State#state{epoch=Epoch}}.
+handle_gossip(pull, {NewEpoch, NewState, NewBuckets}, _From, State) ->
+	{noreply, State#state{epoch=NewEpoch, stateData=NewState, buckets=NewBuckets}}.
 
 % joined cluster
 join(Nodelist, #state{peers=Peers, epoch=Epoch} = State) ->
@@ -117,3 +115,4 @@ mergeList(MyList, FList) ->
 	end,
 	MergedList = lists:merge(Sort, lists:sort(Sort, MyList),lists:sort(Sort, FList)),
 	lists:usort(fun({A,_}, {B,_})-> B>=A end, MergedList).
+
