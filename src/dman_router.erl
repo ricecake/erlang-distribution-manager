@@ -100,7 +100,7 @@ expire(Node, #state{peers=Peers, epoch=Epoch} = State) ->
 	NewPeers = lists:keystore(Node, 1, Peers, {Node, 'DOWN'}),
 	{noreply, State#state{peers=NewPeers, epoch=Epoch+1}}.
 
-code_change(_Oldvsn, State, Extra) -> io:format("~p~n",[{State, Extra}]), {ok, State}.
+code_change(_Oldvsn, State, Extra) -> {ok, State}.
 
 mergeState({MyEpoch, MyNodes, MyBuckets},{FEpoch, FNodes, FBuckets}) ->
 	NewEpoch   = lists:max([MyEpoch, FEpoch])+1,
