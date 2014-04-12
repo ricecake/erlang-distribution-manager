@@ -116,3 +116,5 @@ mergeList(MyList, FList) ->
 	MergedList = lists:merge(Sort, lists:sort(Sort, MyList),lists:sort(Sort, FList)),
 	lists:usort(fun({A,_}, {B,_})-> B>=A end, MergedList).
 
+
+listDifference(_OurNodes, _TheirNodes) -> false.
