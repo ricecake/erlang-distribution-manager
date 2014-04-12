@@ -117,4 +117,12 @@ mergeList(MyList, FList) ->
 	lists:usort(fun({A,_}, {B,_})-> B>=A end, MergedList).
 
 
-listDifference(_OurNodes, _TheirNodes) -> false.
+listDifference(OurState, TheirState) -> 
+	MyNodes = [Node || {Node, _} <- OurState],
+	TheirNodes = [Node || {Node, _} <- TheirState],
+	NewNodes = sets:to_list(sets:subtract(sets:from_list(MyNodes), sets:from_list(TheirNodes))),
+	case NewNodes of 
+		[] -> {nonew, []};
+		_  -> {new, NewNodes}
+	end.
+	
