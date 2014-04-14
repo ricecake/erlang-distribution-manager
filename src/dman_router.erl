@@ -72,10 +72,11 @@ digest(#state{epoch=Epoch, systems=Systems, localBuckets=Buckets, buckets=Bucket
 	NewEpoch = Epoch+1,
 	HandleToken = push,
 	Status = [{System, dman_worker:get_state(System)} || System <- Systems],
-	NodeState = {node(), {NewEpoch, [{buckets, Buckets}, {peers, Peers}, {systems, Status}]}},
+	NewPeers = lists:foldl(fun({Node, _} = New, Acc)-> lists:keystore(Node, 1, Acc, New) end, Peers, [{Node, 'UP'} || Node <- nodes()]),
+	NodeState = {node(), {NewEpoch, [{buckets, Buckets}, {peers, NewPeers}, {systems, Status}]}},
 	NewStateData = lists:keystore(node(), 1, StateData, NodeState),
 	io:format("~p~n", [{NewEpoch, NewStateData, BucketData}]),
-	{reply, {NewEpoch, NewStateData, BucketData}, HandleToken, State#state{epoch=NewEpoch, stateData=NewStateData}}.
+	{reply, {NewEpoch, NewStateData, BucketData}, HandleToken, State#state{epoch=NewEpoch, stateData=NewStateData, peers=NewPeers}}.
 
 handle_cast(_Message, #state{epoch = Epoch} = State) ->
 	{noreply, State#state{epoch = Epoch+1}};
