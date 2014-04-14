@@ -65,7 +65,7 @@ init([]) ->
 
 % how often do we want to send a message? in milliseconds.
 gossip_freq(State) ->
-    {reply, 500, State}.
+    {reply, 5000, State}.
 
 % defines what we're gossiping
 digest(#state{epoch=Epoch, systems=Systems, localBuckets=Buckets, buckets=BucketData, peers=Peers, stateData=StateData} = State) ->
@@ -74,15 +74,18 @@ digest(#state{epoch=Epoch, systems=Systems, localBuckets=Buckets, buckets=Bucket
 	Status = [{System, dman_worker:get_state(System)} || System <- Systems],
 	NodeState = {node(), {NewEpoch, [{buckets, Buckets}, {peers, Peers}, {systems, Status}]}},
 	NewStateData = lists:keystore(node(), 1, StateData, NodeState),
+	io:format("~p~n", [{NewEpoch, NewStateData, BucketData}]),
 	{reply, {NewEpoch, NewStateData, BucketData}, HandleToken, State#state{epoch=NewEpoch, stateData=NewStateData}}.
 
 handle_cast(_Message, #state{epoch = Epoch} = State) ->
-	{noreply, State#state{epoch = Epoch+1}}.
+	{noreply, State#state{epoch = Epoch+1}};
+
+handle_cast({debug, Node}, State) -> Node! State.
 % received a push
 handle_gossip(push, TheirState, From, #state{epoch=MyEpoch, stateData=MyStateData, buckets=MyBuckets} = State) ->
 	MergedState = mergeState({MyEpoch, MyStateData, MyBuckets}, TheirState),
 	{NewEpoch, NewState, NewBuckets} = MergedState,
-	_Node = node(From),
+%	_Node = node(From),
 	{reply, MergedState, pull, State#state{epoch=NewEpoch, stateData=NewState, buckets=NewBuckets}};
 
 
@@ -132,3 +135,4 @@ handleNewNodes(NewNodes, State) ->
 
 balanceBuckets(Buckets, Count) -> 
 	[{Bucket, [hash_ring:find_node(<<"nodes">>, <<Bucket, N:8>>) || N <- lists:seq(0,Count)]} || Bucket <- Buckets].
+
