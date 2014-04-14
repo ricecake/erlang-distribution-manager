@@ -57,7 +57,7 @@ start_link() ->
 init([]) ->
 	hash_ring:create_ring(<<"buckets">>, 128, ?HASH_RING_FUNCTION_MD5),
 	Buckets = [binary:encode_unsigned(Bucket) || Bucket <- lists:seq(0,128)],
-	[hash_ring:add_node(<<"buckets">>, binary:encode_unsigned(Bucket)) || Bucket <- Buckets],
+	[hash_ring:add_node(<<"buckets">>, Bucket) || Bucket <- Buckets],
 	hash_ring:create_ring(<<"nodes">>, 128, ?HASH_RING_FUNCTION_MD5),
 	hash_ring:add_node(<<"nodes">>, erlang:atom_to_binary(node(), latin1)),
 	NodeState = {node(), {0, [{buckets, Buckets}, {peers, []}, {systems, []}]}},
@@ -131,4 +131,4 @@ handleNewNodes(NewNodes, State) ->
 	balanceBuckets(State#state.localBuckets, 3).	
 
 balanceBuckets(Buckets, Count) -> 
-	[ {Bucket, [hash_ring:find_node(<<"nodes">>, <<Bucket, N:8>>) || N <- lists:seq(0,Count)]} || Bucket <- Buckets].
+	[{Bucket, [hash_ring:find_node(<<"nodes">>, <<Bucket, N:8>>) || N <- lists:seq(0,Count)]} || Bucket <- Buckets].
