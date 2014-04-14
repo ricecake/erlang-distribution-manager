@@ -60,7 +60,7 @@ init([]) ->
 	[hash_ring:add_node(<<"buckets">>, binary:encode_unsigned(Bucket)) || Bucket <- Buckets],
 	hash_ring:create_ring(<<"nodes">>, 128, ?HASH_RING_FUNCTION_MD5),
 	hash_ring:add_node(<<"nodes">>, erlang:atom_to_binary(node(), latin1)),
-	NodeState = {node(), {0, [{buckets, Buckets},{peers, []},{systems, []}]}},
+	NodeState = {node(), {0, [{buckets, Buckets}, {peers, []}, {systems, []}]}},
 	{ok, #state{stateData=[NodeState], localBuckets=Buckets, buckets=[{Bucket, {0, [node()]}} || Bucket <- Buckets] }}.
 
 % how often do we want to send a message? in milliseconds.
@@ -72,7 +72,7 @@ digest(#state{epoch=Epoch, systems=Systems, localBuckets=Buckets, buckets=Bucket
 	NewEpoch = Epoch+1,
 	HandleToken = push,
 	Status = [{System, dman_worker:get_state(System)} || System <- Systems],
-	NodeState = {node(), {NewEpoch, [{buckets, Buckets},{peers, Peers},{systems, Status}]}},
+	NodeState = {node(), {NewEpoch, [{buckets, Buckets}, {peers, Peers}, {systems, Status}]}},
 	NewStateData = lists:keystore(node(), 1, StateData, NodeState),
 	{reply, {NewEpoch, NewStateData, BucketData}, HandleToken, State#state{epoch=NewEpoch, stateData=NewStateData}}.
 
@@ -100,7 +100,7 @@ expire(Node, #state{peers=Peers, epoch=Epoch} = State) ->
 	NewPeers = lists:keystore(Node, 1, Peers, {Node, 'DOWN'}),
 	{noreply, State#state{peers=NewPeers, epoch=Epoch+1}}.
 
-code_change(_Oldvsn, State, Extra) -> {ok, State}.
+code_change(_Oldvsn, State, _Extra) -> {ok, State}.
 
 mergeState({MyEpoch, MyNodes, MyBuckets},{FEpoch, FNodes, FBuckets}) ->
 	NewEpoch   = lists:max([MyEpoch, FEpoch])+1,
@@ -125,4 +125,10 @@ listDifference(OurState, TheirState) ->
 		[] -> {nonew, []};
 		_  -> {new, NewNodes}
 	end.
-	
+
+handleNewNodes(NewNodes, State) ->
+	[hash_ring:add_node(<<"nodes">>, erlang:atom_to_binary(Node, latin1)) || Node <- NewNodes],
+	balanceBuckets(State#state.localBuckets, 3).	
+
+balanceBuckets(Buckets, Count) -> 
+	[ {Bucket, [hash_ring:find_node(<<"nodes">>, <<Bucket, N:8>>) || N <- lists:seq(0,Count)]} || Bucket <- Buckets].
