@@ -85,8 +85,8 @@ handle_cast({debug, Node}, State) -> Node! State.
 % received a push
 handle_gossip(push, TheirState, From, #state{epoch=MyEpoch, stateData=MyStateData, buckets=MyBuckets} = State) ->
 	MergedState = mergeState({MyEpoch, MyStateData, MyBuckets}, TheirState),
-	io:format("All Peers: ~p~n", [extractPeers(MergedState)]),
 	{NewEpoch, NewState, NewBuckets} = MergedState,
+	io:format("All Peers: ~p~n", [extractPeers(NewState)]),
 %	_Node = node(From),
 	{reply, MergedState, pull, State#state{epoch=NewEpoch, stateData=NewState, buckets=NewBuckets}};
 
@@ -139,5 +139,5 @@ balanceBuckets(Buckets, Count) ->
 	[{Bucket, [hash_ring:find_node(<<"nodes">>, <<Bucket, N:8>>) || N <- lists:seq(0,Count)]} || Bucket <- Buckets].
 
 
-extractPeers({_NewEpoch, NewState, _NewBuckets}) ->
+extractPeers(NewState) ->
 		lists:usort([ Node || {Node, _status} <-lists:flatten([proplists:get_all_values(peers, List) || List <-[Properties || {_, {_, Properties}} <- NewState]])]).
