@@ -75,7 +75,7 @@ digest(#state{epoch=Epoch, systems=Systems, localBuckets=Buckets, buckets=Bucket
 	NewPeers = lists:foldl(fun({Node, _} = New, Acc)-> lists:keystore(Node, 1, Acc, New) end, Peers, [{Node, 'UP'} || Node <- nodes()]),
 	NodeState = {node(), {NewEpoch, [{buckets, Buckets}, {peers, NewPeers}, {systems, Status}]}},
 	NewStateData = lists:keystore(node(), 1, StateData, NodeState),
-	io:format("~p~n", [{NewEpoch, NewStateData, BucketData}]),
+	io:format("~p~n", [{NewEpoch, {peers, NewPeers}, {systems, Status}}]),
 	{reply, {NewEpoch, NewStateData, BucketData}, HandleToken, State#state{epoch=NewEpoch, stateData=NewStateData, peers=NewPeers}}.
 
 handle_cast(_Message, #state{epoch = Epoch} = State) ->
