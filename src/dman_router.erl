@@ -61,7 +61,7 @@ init([]) ->
 	hash_ring:create_ring(<<"nodes">>, 128, ?HASH_RING_FUNCTION_MD5),
 	hash_ring:add_node(<<"nodes">>, erlang:atom_to_binary(node(), latin1)),
 	NodeState = {node(), {0, [{buckets, Buckets}, {peers, [{node(), 'UP'}]}, {systems, []}]}},
-	{ok, #state{stateData=[NodeState], localBuckets=Buckets, buckets=[{Bucket, {0, [node()]}} || Bucket <- Buckets] }}.
+	{ok, #state{stateData=[NodeState], peers=[{node(), 'UP'}], localBuckets=Buckets, buckets=[{Bucket, {0, [node()]}} || Bucket <- Buckets] }}.
 
 % how often do we want to send a message? in milliseconds.
 gossip_freq(State) ->
@@ -72,11 +72,11 @@ digest(#state{epoch=Epoch, systems=Systems, localBuckets=Buckets, buckets=Bucket
 	NewEpoch = Epoch+1,
 	HandleToken = push,
 	Status = [{System, dman_worker:get_state(System)} || System <- Systems],
-	NewPeers = lists:keystore(node(), 1, lists:foldl(fun({Node, _} = New, Acc)-> lists:keystore(Node, 1, Acc, New) end, Peers, [{Node, 'UP'} || Node <- nodes()]), {node(), 'UP'}),
-	NodeState = {node(), {NewEpoch, [{buckets, Buckets}, {peers, NewPeers}, {systems, Status}]}},
+%	NewPeers = lists:keystore(node(), 1, lists:foldl(fun({Node, _} = New, Acc)-> lists:keystore(Node, 1, Acc, New) end, Peers, [{Node, 'UP'} || Node <- nodes()]), {node(), 'UP'}),
+	NodeState = {node(), {NewEpoch, [{buckets, Buckets}, {peers, Peers}, {systems, Status}]}},
 	NewStateData = lists:keystore(node(), 1, StateData, NodeState),
-	io:format("~p~n", [{NewEpoch, {peers, NewPeers}, {systems, Status}}]),
-	{reply, {NewEpoch, NewStateData, BucketData}, HandleToken, State#state{epoch=NewEpoch, stateData=NewStateData, peers=NewPeers}}.
+	io:format("~p~n", [{NewEpoch, {peers, Peers}, {systems, Status}}]),
+	{reply, {NewEpoch, NewStateData, BucketData}, HandleToken, State#state{epoch=NewEpoch, stateData=NewStateData, peers=Peers}}.
 
 handle_cast(_Message, #state{epoch = Epoch} = State) ->
 	{noreply, State#state{epoch = Epoch+1}};
