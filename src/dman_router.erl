@@ -122,9 +122,7 @@ mergeList(MyList, FList) ->
 	lists:usort(fun({A,_}, {B,_})-> B>=A end, MergedList).
 
 
-listDifference(OurState, TheirState) -> 
-	MyNodes = [Node || {Node, _} <- OurState],
-	TheirNodes = [Node || {Node, _} <- TheirState],
+listDifference(MyNodes, TheirNodes) -> 
 	NewNodes = sets:to_list(sets:subtract(sets:from_list(MyNodes), sets:from_list(TheirNodes))),
 	case NewNodes of 
 		[] -> {nonew, []};
@@ -138,6 +136,10 @@ handleNewNodes(NewNodes, State) ->
 balanceBuckets(Buckets, Count) -> 
 	[{Bucket, [hash_ring:find_node(<<"nodes">>, <<Bucket, N:8>>) || N <- lists:seq(0,Count)]} || Bucket <- Buckets].
 
+findNewNodes(MyState, TheirState) -> 
+	MyNodes = extractPeers([MyState]),
+	TheirNodes = extractPeers(TheirState),
+	listDifference(MyNodes, TheirNodes).
 
 extractPeers(NewState) ->
 		lists:usort([ Node || {Node, _status} <-lists:flatten([proplists:get_all_values(peers, List) || List <-[Properties || {_, {_, Properties}} <- NewState]])]).
