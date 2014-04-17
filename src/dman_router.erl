@@ -86,7 +86,7 @@ handle_cast({debug, Node}, State) -> Node! State.
 handle_gossip(push, TheirState, From, #state{epoch=MyEpoch, stateData=MyStateData, buckets=MyBuckets} = State) ->
 	MergedState = mergeState({MyEpoch, MyStateData, MyBuckets}, TheirState),
 	{NewEpoch, NewState, NewBuckets} = MergedState,
-	io:format("All Peers: ~p~n", [extractPeers(NewState)]),
+	io:format("New Peers: ~p~n", [findNewNodes(MyStateData, NewState)]),
 %	_Node = node(From),
 	{reply, MergedState, pull, State#state{epoch=NewEpoch, stateData=NewState, buckets=NewBuckets}};
 
@@ -137,7 +137,7 @@ balanceBuckets(Buckets, Count) ->
 	[{Bucket, [hash_ring:find_node(<<"nodes">>, <<Bucket, N:8>>) || N <- lists:seq(0,Count)]} || Bucket <- Buckets].
 
 findNewNodes(MyState, TheirState) -> 
-	MyNodes = extractPeers([MyState]),
+	MyNodes = extractPeers(MyState),
 	TheirNodes = extractPeers(TheirState),
 	listDifference(MyNodes, TheirNodes).
 
