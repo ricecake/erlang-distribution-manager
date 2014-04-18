@@ -1,12 +1,3 @@
-%% Simple epidemic based protocol. Gossips an ever increasing epoch
-%% value around the cluster
-%%
-%% Usage:
-%%
-%%   (a@machine1)> gen_gossip_epidemic:start_link().
-%%   (b@machine1)> gen_gossip_epidemic:start_link().
-%%   (b@machine1)> net_adm:ping('a@machine1').
-%%
 -module(dman_router).
 -behaviour(gen_gossip).
 
