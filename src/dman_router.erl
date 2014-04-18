@@ -72,7 +72,6 @@ digest(#state{epoch=Epoch, systems=Systems, localBuckets=Buckets, buckets=Bucket
 	NewEpoch = Epoch+1,
 	HandleToken = push,
 	Status = [{System, dman_worker:get_state(System)} || System <- Systems],
-%	NewPeers = lists:keystore(node(), 1, lists:foldl(fun({Node, _} = New, Acc)-> lists:keystore(Node, 1, Acc, New) end, Peers, [{Node, 'UP'} || Node <- nodes()]), {node(), 'UP'}),
 	NodeState = {node(), {NewEpoch, [{buckets, Buckets}, {peers, Peers}, {systems, Status}]}},
 	NewStateData = lists:keystore(node(), 1, StateData, NodeState),
 	io:format("~p~n", [{NewEpoch, {peers, Peers}, {systems, Status}}]),
@@ -83,17 +82,26 @@ handle_cast(_Message, #state{epoch = Epoch} = State) ->
 
 handle_cast({debug, Node}, State) -> Node! State.
 % received a push
-handle_gossip(push, TheirState, From, #state{epoch=MyEpoch, stateData=MyStateData, buckets=MyBuckets} = State) ->
+handle_gossip(push, TheirState, _From, #state{epoch=MyEpoch, peers=Peers, stateData=MyStateData, buckets=MyBuckets} = State) ->
 	MergedState = mergeState({MyEpoch, MyStateData, MyBuckets}, TheirState),
 	{NewEpoch, NewState, NewBuckets} = MergedState,
-	io:format("New Peers: ~p~n", [findNewNodes(MyStateData, NewState)]),
-%	_Node = node(From),
-	{reply, MergedState, pull, State#state{epoch=NewEpoch, stateData=NewState, buckets=NewBuckets}};
-
+	%io:format("~n~n~p~n~n",[{MyStateData, NewState}]),
+	FoundNodes = findNewNodes(MyStateData, NewState),
+	io:format("New Peers: ~p~n", [FoundNodes]),
+	NewPeers = lists:usort(fun({A,_}, {B,_})-> B>=A end, lists:append(Peers, [ determineLiveness(Node) || Node <- FoundNodes])),
+	{reply, MergedState, pull, State#state{epoch=NewEpoch, peers=NewPeers, stateData=NewState, buckets=NewBuckets}};
 
 % received a symmetric push
-handle_gossip(pull, {NewEpoch, NewState, NewBuckets}, _From, State) ->
-	{noreply, State#state{epoch=NewEpoch, stateData=NewState, buckets=NewBuckets}}.
+handle_gossip(pull, {NewEpoch, NewState, NewBuckets}, _From, #state{stateData=MyStateData, peers=Peers} = State) ->
+	FoundNodes = findNewNodes(MyStateData, NewState),
+	NewPeers = lists:usort(fun({A,_}, {B,_})-> B>=A end, lists:append(Peers, [ determineLiveness(Node) || Node <- FoundNodes])),
+	{noreply, State#state{epoch=NewEpoch, peers=NewPeers, stateData=NewState, buckets=NewBuckets}}.
+
+determineLiveness(Node) ->
+	case net_adm:ping(Node) of
+		pong -> {Node, 'UP'};
+		pang -> {Node, 'DOWN'}
+	end.
 
 % joined cluster
 join(Nodelist, #state{peers=Peers, epoch=Epoch} = State) ->
@@ -124,11 +132,7 @@ mergeList(MyList, FList) ->
 
 
 listDifference(MyNodes, TheirNodes) -> 
-	NewNodes = sets:to_list(sets:subtract(sets:from_list(MyNodes), sets:from_list(TheirNodes))),
-	case NewNodes of 
-		[] -> {nonew, []};
-		_  -> {new, NewNodes}
-	end.
+	lists:usort(fun(A, B)-> B>=A end, sets:to_list(sets:subtract(sets:from_list(MyNodes), sets:from_list(TheirNodes)))).
 
 handleNewNodes(NewNodes, State) ->
 	[hash_ring:add_node(<<"nodes">>, erlang:atom_to_binary(Node, latin1)) || Node <- NewNodes],
@@ -137,10 +141,10 @@ handleNewNodes(NewNodes, State) ->
 balanceBuckets(Buckets, Count) -> 
 	[{Bucket, [hash_ring:find_node(<<"nodes">>, <<Bucket, N:8>>) || N <- lists:seq(0,Count)]} || Bucket <- Buckets].
 
-findNewNodes(MyState, TheirState) -> 
-	MyNodes = extractPeers(MyState),
+findNewNodes(MyState, TheirState) ->
+	MyNodes = extractPeers([proplists:lookup(node(), MyState)]),
 	TheirNodes = extractPeers(TheirState),
-	listDifference(MyNodes, TheirNodes).
+	listDifference(TheirNodes, MyNodes).
 
 extractPeers(NewState) ->
 		lists:usort([ Node || {Node, _status} <-lists:flatten([proplists:get_all_values(peers, List) || List <-[Properties || {_, {_, Properties}} <- NewState]])]).
