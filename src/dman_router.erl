@@ -85,16 +85,12 @@ handle_cast({debug, Node}, State) -> Node! State.
 handle_gossip(push, TheirState, _From, #state{epoch=MyEpoch, peers=Peers, stateData=MyStateData, buckets=MyBuckets} = State) ->
 	MergedState = mergeState({MyEpoch, MyStateData, MyBuckets}, TheirState),
 	{NewEpoch, NewState, NewBuckets} = MergedState,
-	%io:format("~n~n~p~n~n",[{MyStateData, NewState}]),
-	FoundNodes = findNewNodes(MyStateData, NewState),
-	io:format("New Peers: ~p~n", [FoundNodes]),
-	NewPeers = lists:usort(fun({A,_}, {B,_})-> B>=A end, lists:append(Peers, [ determineLiveness(Node) || Node <- FoundNodes])),
+	NewPeers = rectifyPeerList(Peers, MyStateData, NewState),
 	{reply, MergedState, pull, State#state{epoch=NewEpoch, peers=NewPeers, stateData=NewState, buckets=NewBuckets}};
 
 % received a symmetric push
 handle_gossip(pull, {NewEpoch, NewState, NewBuckets}, _From, #state{stateData=MyStateData, peers=Peers} = State) ->
-	FoundNodes = findNewNodes(MyStateData, NewState),
-	NewPeers = lists:usort(fun({A,_}, {B,_})-> B>=A end, lists:append(Peers, [ determineLiveness(Node) || Node <- FoundNodes])),
+	NewPeers = rectifyPeerList(Peers, MyStateData, NewState),
 	{noreply, State#state{epoch=NewEpoch, peers=NewPeers, stateData=NewState, buckets=NewBuckets}}.
 
 determineLiveness(Node) ->
@@ -102,6 +98,21 @@ determineLiveness(Node) ->
 		pong -> {Node, 'UP'};
 		pang -> {Node, 'DOWN'}
 	end.
+
+rectifyPeerList(Peers, MyStateData, NewState) ->
+	FoundNodes = findNewNodes(MyStateData, NewState),
+	CombinedPeers = lists:usort(fun({A,_}, {B,_})-> B>=A end, lists:append(Peers, [ determineLiveness(Node) || Node <- FoundNodes])),
+	[ checkDowned(Node, MyStateData, NewState) || Node <- CombinedPeers].
+
+checkDowned({_Node, 'UP'} = Short, _MyState, _NewState) -> Short;
+checkDowned({Node, 'DOWN'}, MyState, NewState) ->
+	{LastEpoch, _Meta} = proplists:get_value(Node, MyState),
+	{NewEpoch, _NewMeta} = proplists:get_value(Node, NewState),
+	case NewEpoch > LastEpoch of
+		true -> determineLiveness(Node);
+		false-> {Node, 'DOWN'}
+	end.
+
 
 % joined cluster
 join(Nodelist, #state{peers=Peers, epoch=Epoch} = State) ->
