@@ -74,13 +74,23 @@ digest(#state{epoch=Epoch, systems=Systems, localBuckets=Buckets, buckets=Bucket
 	Status = [{System, dman_worker:get_state(System)} || System <- Systems],
 	NodeState = {node(), {NewEpoch, [{buckets, Buckets}, {peers, Peers}, {systems, Status}]}},
 	NewStateData = lists:keystore(node(), 1, StateData, NodeState),
-	io:format("~p~n", [{NewEpoch, {peers, Peers}, {systems, Status}}]),
 	{reply, {NewEpoch, NewStateData, BucketData}, HandleToken, State#state{epoch=NewEpoch, stateData=NewStateData, peers=Peers}}.
 
-handle_cast(_Message, #state{epoch = Epoch} = State) ->
-	{noreply, State#state{epoch = Epoch+1}};
+handle_cast({debug, Node}, State) ->
+	Node! State,
+	{noreply, State};
 
-handle_cast({debug, Node}, State) -> Node! State.
+handle_cast({rebalance, NewNodes}, State) when is_list(NewNodes) ->
+	io:format("Rebalancing: ~p~n", [NewNodes]),
+	{noreply, State};
+
+handle_cast({rebalance, NewNode}, State) when is_tuple(NewNode) ->
+	io:format("Rebalancing single: ~p~n", [NewNode]),
+	{noreply, State};
+
+handle_cast(_Message, State) ->
+	{noreply, State}.
+
 % received a push
 handle_gossip(push, TheirState, _From, #state{epoch=MyEpoch, peers=Peers, stateData=MyStateData, buckets=MyBuckets} = State) ->
 	MergedState = mergeState({MyEpoch, MyStateData, MyBuckets}, TheirState),
@@ -101,7 +111,13 @@ determineLiveness(Node) ->
 
 rectifyPeerList(Peers, MyStateData, NewState) ->
 	FoundNodes = findNewNodes(MyStateData, NewState),
-	CombinedPeers = lists:usort(fun({A,_}, {B,_})-> B>=A end, lists:append(Peers, [ determineLiveness(Node) || Node <- FoundNodes])),
+	NewNodeStatus = [ determineLiveness(Node) || Node <- FoundNodes],
+	case NewNodeStatus of
+		[] -> ok;
+		_  -> gen_gossip:cast(self(), {rebalance, NewNodeStatus}),
+		      ok
+	end,
+	CombinedPeers = lists:usort(fun({A,_}, {B,_})-> B>=A end, lists:append(Peers, NewNodeStatus)),
 	[ checkDowned(Node, MyStateData, NewState) || Node <- CombinedPeers].
 
 checkDowned({_Node, 'UP'} = Short, _MyState, _NewState) -> Short;
@@ -109,7 +125,12 @@ checkDowned({Node, 'DOWN'}, MyState, NewState) ->
 	{LastEpoch, _Meta} = proplists:get_value(Node, MyState),
 	{NewEpoch, _NewMeta} = proplists:get_value(Node, NewState),
 	case NewEpoch > LastEpoch of
-		true -> determineLiveness(Node);
+		true -> NodeState = {Node, Status} = determineLiveness(Node),
+			case Status of
+				'UP' -> gen_gossip:cast(self(), {rebalance, NodeState});
+				'DOWN' -> ok
+			end,
+			NodeState;
 		false-> {Node, 'DOWN'}
 	end.
 
