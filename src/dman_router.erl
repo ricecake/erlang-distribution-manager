@@ -46,17 +46,17 @@ start_link() ->
 %%%===================================================================
 
 init([]) ->
-	hash_ring:create_ring(<<"buckets">>, 128, ?HASH_RING_FUNCTION_MD5),
+	hash_ring:create_ring(<<"buckets">>, 256, ?HASH_RING_FUNCTION_MD5),
 	Buckets = [binary:encode_unsigned(Bucket) || Bucket <- lists:seq(0,128)],
 	[hash_ring:add_node(<<"buckets">>, Bucket) || Bucket <- Buckets],
-	hash_ring:create_ring(<<"nodes">>, 128, ?HASH_RING_FUNCTION_MD5),
+	hash_ring:create_ring(<<"nodes">>, 256, ?HASH_RING_FUNCTION_MD5),
 	hash_ring:add_node(<<"nodes">>, erlang:atom_to_binary(node(), latin1)),
 	NodeState = {node(), {0, [{buckets, Buckets}, {peers, [{node(), 'UP'}]}, {systems, []}]}},
 	{ok, #state{stateData=[NodeState], peers=[{node(), 'UP'}], localBuckets=Buckets, buckets=[{Bucket, {0, [node()]}} || Bucket <- Buckets] }}.
 
 % how often do we want to send a message? in milliseconds.
 gossip_freq(State) ->
-    {reply, 5000, State}.
+    {reply, 1000, State}.
 
 % defines what we're gossiping
 digest(#state{epoch=Epoch, systems=Systems, localBuckets=Buckets, buckets=BucketData, peers=Peers, stateData=StateData} = State) ->
@@ -73,11 +73,13 @@ handle_cast({debug, Node}, State) ->
 
 handle_cast({rebalance, NewNodes}, State) when is_list(NewNodes) ->
 	io:format("Rebalancing: ~p~n", [NewNodes]),
-	{noreply, State};
+	NewState = handleNewNodes(NewNodes, State),
+	{noreply, NewState};
 
 handle_cast({rebalance, NewNode}, State) when is_tuple(NewNode) ->
 	io:format("Rebalancing single: ~p~n", [NewNode]),
-	{noreply, State};
+	NewState = handleNewNodes([NewNode], State),
+	{noreply, NewState};
 
 handle_cast(_Message, State) ->
 	{noreply, State}.
@@ -113,8 +115,8 @@ rectifyPeerList(Peers, MyStateData, NewState) ->
 
 checkDowned({_Node, 'UP'} = Short, _MyState, _NewState) -> Short;
 checkDowned({Node, 'DOWN'}, MyState, NewState) ->
-	{LastEpoch, _Meta} = proplists:get_value(Node, MyState),
-	{NewEpoch, _NewMeta} = proplists:get_value(Node, NewState),
+	{LastEpoch, _Meta} = proplists:get_value(Node, MyState, {-1, []}),
+	{NewEpoch, _NewMeta} = proplists:get_value(Node, NewState, {infinity, []}),
 	case NewEpoch > LastEpoch of
 		true -> NodeState = {Node, Status} = determineLiveness(Node),
 			case Status of
@@ -135,6 +137,7 @@ join(Nodelist, #state{peers=Peers, epoch=Epoch} = State) ->
 expire(Node, #state{peers=Peers, epoch=Epoch} = State) ->
 	NewPeers = lists:keystore(Node, 1, Peers, {Node, 'DOWN'}),
 	hash_ring:remove_node(<<"nodes">>, erlang:atom_to_binary(Node, latin1)),
+	gen_gossip:cast(self(), {rebalance, {Node, 'DOWN'}}),
 	{noreply, State#state{peers=NewPeers, epoch=Epoch+1}}.
 
 code_change(_Oldvsn, State, _Extra) -> {ok, State}.
@@ -157,12 +160,17 @@ mergeList(MyList, FList) ->
 listDifference(MyNodes, TheirNodes) -> 
 	lists:usort(fun(A, B)-> B>=A end, sets:to_list(sets:subtract(sets:from_list(MyNodes), sets:from_list(TheirNodes)))).
 
-handleNewNodes(NewNodes, State) ->
-	[hash_ring:add_node(<<"nodes">>, erlang:atom_to_binary(Node, latin1)) || Node <- NewNodes],
-	balanceBuckets(State#state.localBuckets, 3).	
+handleNewNodes(NewNodes, #state{epoch=Epoch, localBuckets=LBuckets, buckets=BucketData} = State) ->
+	[hash_ring:add_node(<<"nodes">>, erlang:atom_to_binary(Node, latin1)) || {Node, NState} <- NewNodes, NState =:= 'UP'],
+	[hash_ring:remove_node(<<"nodes">>, erlang:atom_to_binary(Node, latin1)) || {Node, NState} <- NewNodes, NState =:= 'DOWN'],
+	RebalancedBuckets = balanceBuckets(LBuckets, 3),
+	NewBucketData = lists:foldl(fun({Bucket, Blist}, List) -> lists:keystore(Bucket, 1, List, {Bucket, {Epoch+1, Blist}}) end, BucketData, RebalancedBuckets),
+	NewLocalBuckets = localBucketTransform(node(), NewBucketData),
+	State#state{epoch=Epoch+1, buckets=NewBucketData, localBuckets=NewLocalBuckets}.
 
-balanceBuckets(Buckets, Count) -> 
-	[{Bucket, [hash_ring:find_node(<<"nodes">>, <<Bucket, N:8>>) || N <- lists:seq(0,Count)]} || Bucket <- Buckets].
+
+balanceBuckets(Buckets, Count) ->
+	[{Bucket, lists:usort([Node ||{ok, Node} <- [hash_ring:find_node(<<"nodes">>, << (binary:encode_unsigned(N))/bits, Bucket/bits>>) || N <- lists:seq(1,Count)]])} || Bucket <- Buckets].
 
 findNewNodes(MyState, TheirState) ->
 	MyNodes = extractPeers([proplists:lookup(node(), MyState)]),
@@ -171,3 +179,8 @@ findNewNodes(MyState, TheirState) ->
 
 extractPeers(NewState) ->
 		lists:usort([ Node || {Node, _status} <-lists:flatten([proplists:get_all_values(peers, List) || List <-[Properties || {_, {_, Properties}} <- NewState]])]).
+
+localBucketTransform(TopicNode, NewBucketData) when is_atom(TopicNode)-> localBucketTransform(erlang:atom_to_binary(TopicNode, latin1), NewBucketData);
+localBucketTransform(TopicNode, NewBucketData) ->
+	Transformed = lists:foldl(fun({Node, Bucket}, Dict)-> dict:append(Node, Bucket, Dict) end, dict:new(), lists:flatten([ [{Node, Bucket} || Node <- NodeList] || {Bucket, {_Epoch, NodeList}} <- NewBucketData])),
+	dict:fetch(TopicNode, Transformed).
