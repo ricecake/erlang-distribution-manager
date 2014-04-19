@@ -107,7 +107,7 @@ rectifyPeerList(Peers, MyStateData, NewState) ->
 	NewNodeStatus = [ determineLiveness(Node) || Node <- FoundNodes],
 	case NewNodeStatus of
 		[] -> ok;
-		_  -> gen_gossip:cast(self(), {rebalance, NewNodeStatus}),
+		_  -> gen_gossip:cast(self(), {rebalance, [ {node(), 'UP'} |NewNodeStatus]}),
 		      ok
 	end,
 	CombinedPeers = lists:usort(fun({A,_}, {B,_})-> B>=A end, lists:append(Peers, NewNodeStatus)),
@@ -137,8 +137,8 @@ join(Nodelist, #state{peers=Peers, epoch=Epoch} = State) ->
 expire(Node, #state{peers=Peers, epoch=Epoch} = State) ->
 	NewPeers = lists:keystore(Node, 1, Peers, {Node, 'DOWN'}),
 	hash_ring:remove_node(<<"nodes">>, erlang:atom_to_binary(Node, latin1)),
-	gen_gossip:cast(self(), {rebalance, {Node, 'DOWN'}}),
-	{noreply, State#state{peers=NewPeers, epoch=Epoch+1}}.
+	NewState = handleNewNodes([{Node, 'DOWN'}], State#state{peers=NewPeers, epoch=Epoch+1}),
+	{noreply, NewState}.
 
 code_change(_Oldvsn, State, _Extra) -> {ok, State}.
 
