@@ -184,3 +184,7 @@ localBucketTransform(TopicNode, NewBucketData) when is_atom(TopicNode)-> localBu
 localBucketTransform(TopicNode, NewBucketData) ->
 	Transformed = lists:foldl(fun({Node, Bucket}, Dict)-> dict:append(Node, Bucket, Dict) end, dict:new(), lists:flatten([ [{Node, Bucket} || Node <- NodeList] || {Bucket, {_Epoch, NodeList}} <- NewBucketData])),
 	dict:fetch(TopicNode, Transformed).
+
+dnode() -> dnode(node()).
+dnode(Node) when is_binary(Node) -> Node;
+dnode(Node) when is_atom(Node) -> erlang:atom_to_binary(Node, latin1).
