@@ -191,3 +191,8 @@ localBucketTransform(TopicNode, NewBucketData) ->
 dnode() -> dnode(node()).
 dnode(Node) when is_binary(Node) -> Node;
 dnode(Node) when is_atom(Node) -> erlang:atom_to_binary(Node, latin1).
+
+% this is where I will put a function that tells us what node we lost what buckets too.
+% essentiall, calculate list difference on the set of local buckets, and then look up what
+% nodes have those buckets now, and compare that to what we used to know was the ownership of 
+% each bucket.  so list difference on local nodes, and then list difference on bucket nodes.
