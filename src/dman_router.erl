@@ -47,9 +47,9 @@ start_link() ->
 
 init([]) ->
 	hash_ring:create_ring(<<"buckets">>, 256, ?HASH_RING_FUNCTION_MD5),
-	Buckets = [binary:encode_unsigned(Bucket) || Bucket <- lists:seq(0,128)],
+	Buckets = [binary:encode_unsigned(Bucket) || Bucket <- lists:seq(0,32)],
 	[hash_ring:add_node(<<"buckets">>, Bucket) || Bucket <- Buckets],
-	hash_ring:create_ring(<<"nodes">>, 256, ?HASH_RING_FUNCTION_MD5),
+	hash_ring:create_ring(<<"nodes">>, 64, ?HASH_RING_FUNCTION_MD5),
 	hash_ring:add_node(<<"nodes">>, dnode()),
 	NodeState = {node(), {0, [{buckets, Buckets}, {peers, [{node(), 'UP'}]}, {systems, []}]}},
 	{ok, #state{stateData=[NodeState], peers=[{node(), 'UP'}], localBuckets=Buckets, buckets=[{Bucket, {0, [node()]}} || Bucket <- Buckets] }}.
@@ -157,17 +157,22 @@ mergeList(MyList, FList) ->
 listDifference(MyNodes, TheirNodes) -> 
 	lists:usort(fun(A, B)-> B>=A end, sets:to_list(sets:subtract(sets:from_list(MyNodes), sets:from_list(TheirNodes)))).
 
-handleNewNodes(NewNodes, #state{epoch=Epoch, localBuckets=LBuckets, buckets=BucketData} = State) ->
+handleNewNodes(NewNodes, #state{epoch=Epoch, peers=Peers, localBuckets=LBuckets, buckets=BucketData} = State) ->
 	[hash_ring:add_node(<<"nodes">>, dnode(Node)) || {Node, NState} <- NewNodes, NState =:= 'UP'],
 	[hash_ring:remove_node(<<"nodes">>, dnode(Node)) || {Node, NState} <- NewNodes, NState =:= 'DOWN'],
-	RebalancedBuckets = balanceBuckets(LBuckets, 3),
+	RebalancedBuckets = balanceBuckets(LBuckets, lists:min([3, length(Peers)])),
 	NewBucketData = lists:foldl(fun({Bucket, Blist}, List) -> lists:keystore(Bucket, 1, List, {Bucket, {Epoch+1, Blist}}) end, BucketData, RebalancedBuckets),
 	NewLocalBuckets = localBucketTransform(node(), NewBucketData),
 	State#state{epoch=Epoch+1, buckets=NewBucketData, localBuckets=NewLocalBuckets}.
 
 
 balanceBuckets(Buckets, Count) ->
-	[{Bucket, lists:usort([Node ||{ok, Node} <- [hash_ring:find_node(<<"nodes">>, << (binary:encode_unsigned(N))/bits, Bucket/bits>>) || N <- lists:seq(1,Count)]])} || Bucket <- Buckets].
+	[buildBucketList(Bucket, Count, 0, [], 0) || Bucket <- Buckets].
+buildBucketList(Bucket, Needs, Has, Accum, _Index) when Needs == Has -> {Bucket, Accum};
+buildBucketList(Bucket, Needs, _Has, Accum, Index) -> 
+	{ok, Node} = hash_ring:find_node(<<"nodes">>, << (binary:encode_unsigned(Index))/bits, Bucket/bits>>),
+	NewList = lists:usort([Node|Accum]),
+	buildBucketList(Bucket, Needs, length(NewList), NewList, Index+1).
 
 findNewNodes(MyState, TheirState) ->
 	MyNodes = extractPeers([proplists:lookup(node(), MyState)]),
