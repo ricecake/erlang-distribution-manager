@@ -137,7 +137,7 @@ join(Nodelist, #state{peers=Peers, epoch=Epoch} = State) ->
 expire(Node, #state{peers=Peers, epoch=Epoch} = State) ->
 	NewPeers = lists:keystore(Node, 1, Peers, {Node, 'DOWN'}),
 	hash_ring:remove_node(<<"nodes">>, erlang:atom_to_binary(Node, latin1)),
-	NewState = handleNewNodes([{Node, 'DOWN'}], State#state{peers=NewPeers, epoch=Epoch+1}),
+	NewState = handleNewNodes([{erlang:atom_to_binary(Node, latin1), 'DOWN'}], State#state{peers=NewPeers, epoch=Epoch+1}),
 	{noreply, NewState}.
 
 code_change(_Oldvsn, State, _Extra) -> {ok, State}.
