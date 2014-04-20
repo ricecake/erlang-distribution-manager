@@ -72,12 +72,10 @@ handle_cast({debug, Node}, State) ->
 	{noreply, State};
 
 handle_cast({rebalance, NewNodes}, State) when is_list(NewNodes) ->
-	io:format("Rebalancing: ~p~n", [NewNodes]),
 	NewState = handleNewNodes(NewNodes, State),
 	{noreply, NewState};
 
 handle_cast({rebalance, NewNode}, State) when is_tuple(NewNode) ->
-	io:format("Rebalancing single: ~p~n", [NewNode]),
 	NewState = handleNewNodes([NewNode], State),
 	{noreply, NewState};
 
@@ -107,7 +105,7 @@ rectifyPeerList(Peers, MyStateData, NewState) ->
 	NewNodeStatus = [ determineLiveness(Node) || Node <- FoundNodes],
 	case NewNodeStatus of
 		[] -> ok;
-		_  -> gen_gossip:cast(self(), {rebalance, [ {node(), 'UP'} |NewNodeStatus]}),
+		_  -> gen_gossip:cast(self(), {rebalance, NewNodeStatus}),
 		      ok
 	end,
 	CombinedPeers = lists:usort(fun({A,_}, {B,_})-> B>=A end, lists:append(Peers, NewNodeStatus)),
@@ -179,7 +177,7 @@ findNewNodes(MyState, TheirState) ->
 extractPeers(NewState) ->
 		lists:usort([ Node || {Node, _status} <-lists:flatten([proplists:get_all_values(peers, List) || List <-[Properties || {_, {_, Properties}} <- NewState]])]).
 
-%localBucketTransform(TopicNode, NewBucketData) when is_atom(TopicNode)-> localBucketTransform(dnode(TopicNode), NewBucketData);
+localBucketTransform(TopicNode, NewBucketData) when is_atom(TopicNode)-> localBucketTransform(dnode(TopicNode), NewBucketData);
 localBucketTransform(TopicNode, NewBucketData) ->
 	Transformed = lists:foldl(fun({Node, Bucket}, Dict)-> dict:append(Node, Bucket, Dict) end, dict:new(), lists:flatten([ [{Node, Bucket} || Node <- NodeList] || {Bucket, {_Epoch, NodeList}} <- NewBucketData])),
 	dict:fetch(TopicNode, Transformed).
