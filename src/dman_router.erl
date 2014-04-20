@@ -160,9 +160,10 @@ listDifference(MyNodes, TheirNodes) ->
 handleNewNodes(NewNodes, #state{epoch=Epoch, peers=Peers, localBuckets=LBuckets, buckets=BucketData} = State) ->
 	[hash_ring:add_node(<<"nodes">>, dnode(Node)) || {Node, NState} <- NewNodes, NState =:= 'UP'],
 	[hash_ring:remove_node(<<"nodes">>, dnode(Node)) || {Node, NState} <- NewNodes, NState =:= 'DOWN'],
-	RebalancedBuckets = balanceBuckets(LBuckets, lists:min([3, length(Peers)])),
+	RebalancedBuckets = balanceBuckets(LBuckets, lists:min([3, length([ Node ||{Node, NState}<-Peers, NState =:= 'UP'])])),
 	NewBucketData = lists:foldl(fun({Bucket, Blist}, List) -> lists:keystore(Bucket, 1, List, {Bucket, {Epoch+1, Blist}}) end, BucketData, RebalancedBuckets),
 	NewLocalBuckets = localBucketTransform(node(), NewBucketData),
+	io:format("LostBuckets: ~p~n", [listDifference(LBuckets, NewLocalBuckets)]),
 	State#state{epoch=Epoch+1, buckets=NewBucketData, localBuckets=NewLocalBuckets}.
 
 
