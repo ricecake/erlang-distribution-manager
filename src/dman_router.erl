@@ -2,7 +2,7 @@
 -behaviour(gen_gossip).
 
 %% api
--export([start_link/0, handle_cast/2, code_change/3]).
+-export([start_link/0, handle_cast/2, code_change/3, attach/1, invite/1]).
 
 %% gen_gossip callbacks
 -export([init/1,
@@ -41,6 +41,11 @@
 start_link() ->
     gen_gossip:register_handler(?MODULE, [], epidemic).
 
+
+attach(Node) when is_atom(Node) ->
+	gen_gossip:cast(dman_router, {attach, Node}).
+
+invite(Node) when is_atom(Node) -> gen_gossip:cast(dman_router, {invite, Node}).
 %%%===================================================================
 %%% gen_gossip callbacks
 %%%===================================================================
@@ -78,6 +83,14 @@ handle_cast({rebalance, NewNodes}, State) when is_list(NewNodes) ->
 handle_cast({rebalance, NewNode}, State) when is_tuple(NewNode) ->
 	NewState = handleNewNodes([NewNode], State),
 	{noreply, NewState};
+
+handle_cast({attach, Node}, State) -> 
+	net_adm:ping(Node),
+	{noreply, State#state{epoch=-1, localBuckets=[]}};
+
+handle_cast({invite, Node}, State) ->
+	net_adm:ping(Node),
+	{noreply, State};
 
 handle_cast(_Message, State) ->
 	{noreply, State}.
@@ -163,7 +176,7 @@ handleNewNodes(NewNodes, #state{epoch=Epoch, peers=Peers, localBuckets=LBuckets,
 	RebalancedBuckets = balanceBuckets(LBuckets, lists:min([3, length([ Node ||{Node, NState}<-Peers, NState =:= 'UP'])])),
 	NewBucketData = lists:foldl(fun({Bucket, Blist}, List) -> lists:keystore(Bucket, 1, List, {Bucket, {Epoch+1, Blist}}) end, BucketData, RebalancedBuckets),
 	NewLocalBuckets = localBucketTransform(node(), NewBucketData),
-	io:format("LostBuckets: ~p~n", [listDifference(LBuckets, NewLocalBuckets)]),
+	io:format("gotBuckets: ~p~n", [listDifference(NewLocalBuckets, LBuckets)]),
 	State#state{epoch=Epoch+1, buckets=NewBucketData, localBuckets=NewLocalBuckets}.
 
 
@@ -186,7 +199,10 @@ extractPeers(NewState) ->
 localBucketTransform(TopicNode, NewBucketData) when is_atom(TopicNode)-> localBucketTransform(dnode(TopicNode), NewBucketData);
 localBucketTransform(TopicNode, NewBucketData) ->
 	Transformed = lists:foldl(fun({Node, Bucket}, Dict)-> dict:append(Node, Bucket, Dict) end, dict:new(), lists:flatten([ [{Node, Bucket} || Node <- NodeList] || {Bucket, {_Epoch, NodeList}} <- NewBucketData])),
-	dict:fetch(TopicNode, Transformed).
+	case dict:find(TopicNode, Transformed) of
+		{ok, Buckets} -> Buckets;
+		error         -> []
+	end.
 
 dnode() -> dnode(node()).
 dnode(Node) when is_binary(Node) -> Node;
