@@ -2,7 +2,7 @@
 -behaviour(gen_gossip).
 
 %% api
--export([start_link/0, handle_cast/2, code_change/3, attach/1, invite/1]).
+-export([start_link/0, handle_call/3, handle_cast/2, code_change/3, attach/1, invite/1]).
 
 %% gen_gossip callbacks
 -export([init/1,
@@ -84,9 +84,15 @@ handle_cast({rebalance, NewNode}, State) when is_tuple(NewNode) ->
 	NewState = handleNewNodes([NewNode], State),
 	{noreply, NewState};
 
-handle_cast({attach, Node}, State) -> 
-	net_adm:ping(Node),
-	{noreply, State#state{epoch=-1, localBuckets=[]}};
+handle_cast({attach, SNode}, State) -> 
+	net_adm:ping(SNode),
+	{Buckets, Peers} = gen_gossip:call({dman_router, SNode}, bootstrap),
+        [hash_ring:add_node(<<"nodes">>, dnode(Node)) || {Node, NState} <- Peers, NState =:= 'UP'],
+        RebalancedBuckets = balanceBuckets([Bucket||{Bucket, _Data}<-Buckets], lists:min([3, 1+length([ Node ||{Node, NState}<-Peers, NState =:= 'UP'])])),
+        NewBucketData = [{Bucket, {0, Blist}} || {Bucket, Blist} <-RebalancedBuckets],
+        NewLocalBuckets = localBucketTransform(dnode(), NewBucketData),
+        io:format("gotBuckets: ~p~n", [NewLocalBuckets]),
+	{noreply, State#state{buckets=NewBucketData, localBuckets=NewLocalBuckets, peers=Peers}};
 
 handle_cast({invite, Node}, State) ->
 	net_adm:ping(Node),
@@ -95,6 +101,11 @@ handle_cast({invite, Node}, State) ->
 handle_cast(_Message, State) ->
 	{noreply, State}.
 
+handle_call(bootstrap, _From, #state{buckets=Buckets, peers=Peers} = State) ->
+	{reply, {Buckets, Peers}, State};
+
+handle_call(_Request, _From, State) ->
+	{noreply, State}.
 % received a push
 handle_gossip(push, TheirState, _From, #state{epoch=MyEpoch, peers=Peers, stateData=MyStateData, buckets=MyBuckets} = State) ->
 	MergedState = mergeState({MyEpoch, MyStateData, MyBuckets}, TheirState),
@@ -175,7 +186,7 @@ handleNewNodes(NewNodes, #state{epoch=Epoch, peers=Peers, localBuckets=LBuckets,
 	[hash_ring:remove_node(<<"nodes">>, dnode(Node)) || {Node, NState} <- NewNodes, NState =:= 'DOWN'],
 	RebalancedBuckets = balanceBuckets(LBuckets, lists:min([3, length([ Node ||{Node, NState}<-Peers, NState =:= 'UP'])])),
 	NewBucketData = lists:foldl(fun({Bucket, Blist}, List) -> lists:keystore(Bucket, 1, List, {Bucket, {Epoch+1, Blist}}) end, BucketData, RebalancedBuckets),
-	NewLocalBuckets = localBucketTransform(node(), NewBucketData),
+	NewLocalBuckets = localBucketTransform(dnode(), NewBucketData),
 	io:format("gotBuckets: ~p~n", [listDifference(NewLocalBuckets, LBuckets)]),
 	State#state{epoch=Epoch+1, buckets=NewBucketData, localBuckets=NewLocalBuckets}.
 
@@ -206,6 +217,7 @@ localBucketTransform(TopicNode, NewBucketData) ->
 
 dnode() -> dnode(node()).
 dnode(Node) when is_binary(Node) -> Node;
+dnode(Node) when is_pid(Node) -> node(Node);
 dnode(Node) when is_atom(Node) -> erlang:atom_to_binary(Node, latin1).
 
 % this is where I will put a function that tells us what node we lost what buckets too.
