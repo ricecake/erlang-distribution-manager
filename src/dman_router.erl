@@ -18,7 +18,6 @@
     epoch = 0,
     peers = [],
     buckets = [],
-    systems = [],
     localBuckets = [],
     stateData = []
 }).
@@ -63,11 +62,10 @@ gossip_freq(State) ->
     {reply, 1000, State}.
 
 % defines what we're gossiping
-digest(#state{epoch=Epoch, systems=Systems, localBuckets=Buckets, buckets=BucketData, peers=Peers, stateData=StateData} = State) ->
+digest(#state{epoch=Epoch, localBuckets=Buckets, buckets=BucketData, peers=Peers, stateData=StateData} = State) ->
 	NewEpoch = Epoch+1,
 	HandleToken = push,
-	Status = [{System, dman_worker:get_state(System)} || System <- Systems],
-	NodeState = {node(), {NewEpoch, [{buckets, Buckets}, {peers, Peers}, {systems, Status}]}},
+	NodeState = {node(), {NewEpoch, [{buckets, Buckets}, {peers, Peers}, {system, getSystemStatus()}]}},
 	NewStateData = lists:keystore(node(), 1, StateData, NodeState),
 	{reply, {NewEpoch, NewStateData, BucketData}, HandleToken, State#state{epoch=NewEpoch, stateData=NewStateData, peers=Peers}}.
 
@@ -213,6 +211,13 @@ dnode() -> dnode(node()).
 dnode(Node) when is_binary(Node) -> Node;
 dnode(Node) when is_pid(Node) -> node(Node);
 dnode(Node) when is_atom(Node) -> erlang:atom_to_binary(Node, latin1).
+
+getSystemStatus() ->
+	Cpu = {cpu, [{Method, apply(cpu_sup, Method, [])}|| Method <- [avg1, avg5, avg15, nprocs, util]]},
+	Mem = {memory, memsup:get_system_memory_data()},
+	Disk= {disk, disksup:get_disk_data()},
+	Alarms = {alarms, alarm_handler:get_alarms()},
+	[Cpu, Mem, Disk, Alarms].
 
 % this is where I will put a function that tells us what node we lost what buckets too.
 % essentiall, calculate list difference on the set of local buckets, and then look up what

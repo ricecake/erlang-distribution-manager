@@ -6,7 +6,8 @@
   {applications, [
                   kernel,
                   stdlib,
-		  lager
+		  lager,
+		  os_mon
                  ]},
   {mod, { dman_app, []}},
   {env, []}
