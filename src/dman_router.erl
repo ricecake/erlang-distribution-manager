@@ -2,7 +2,7 @@
 -behaviour(gen_gossip).
 
 %% api
--export([start_link/0, handle_call/3, handle_cast/2, code_change/3, attach/1, invite/1]).
+-export([start_link/0, handle_call/3, handle_cast/2, code_change/3, attach/1]).
 
 %% gen_gossip callbacks
 -export([init/1,
@@ -45,7 +45,6 @@ start_link() ->
 attach(Node) when is_atom(Node) ->
 	gen_gossip:cast(dman_router, {attach, Node}).
 
-invite(Node) when is_atom(Node) -> gen_gossip:cast(dman_router, {invite, Node}).
 %%%===================================================================
 %%% gen_gossip callbacks
 %%%===================================================================
@@ -86,23 +85,13 @@ handle_cast({rebalance, NewNode}, State) when is_tuple(NewNode) ->
 
 handle_cast({attach, SNode}, State) -> 
 	net_adm:ping(SNode),
-	{Buckets, Peers} = gen_gossip:call({dman_router, SNode}, bootstrap),
-        [hash_ring:add_node(<<"nodes">>, dnode(Node)) || {Node, NState} <- Peers, NState =:= 'UP'],
-        RebalancedBuckets = balanceBuckets([Bucket||{Bucket, _Data}<-Buckets], lists:min([3, 1+length([ Node ||{Node, NState}<-Peers, NState =:= 'UP'])])),
-        NewBucketData = [{Bucket, {0, Blist}} || {Bucket, Blist} <-RebalancedBuckets],
-        NewLocalBuckets = localBucketTransform(dnode(), NewBucketData),
-        io:format("gotBuckets: ~p~n", [NewLocalBuckets]),
-	{noreply, State#state{buckets=NewBucketData, localBuckets=NewLocalBuckets, peers=Peers}};
-
-handle_cast({invite, Node}, State) ->
-	net_adm:ping(Node),
 	{noreply, State};
 
 handle_cast(_Message, State) ->
 	{noreply, State}.
 
-handle_call(bootstrap, _From, #state{buckets=Buckets, peers=Peers} = State) ->
-	{reply, {Buckets, Peers}, State};
+handle_call(bootstrap, _From, #state{buckets=Buckets, epoch=Epoch} = State) ->
+	{reply, {Epoch, Buckets}, State};
 
 handle_call(_Request, _From, State) ->
 	{noreply, State}.
@@ -151,9 +140,14 @@ checkDowned({Node, 'DOWN'}, MyState, NewState) ->
 
 
 % joined cluster
-join(Nodelist, #state{peers=Peers, epoch=Epoch} = State) ->
+join([SNode|_] = Nodelist, #state{peers=Peers} = State) ->
 	NewPeers = lists:foldl(fun(Node, List)-> lists:keystore(Node, 1, List, {Node, 'UP'}) end, Peers, Nodelist),
-	{noreply, State#state{peers=NewPeers, epoch=Epoch+1}}.
+	{NewEpoch, Buckets} = gen_gossip:call({dman_router, SNode}, bootstrap),
+        [hash_ring:add_node(<<"nodes">>, dnode(Node)) || {Node, NState} <- NewPeers, NState =:= 'UP'],
+        RebalancedBuckets = balanceBuckets([Bucket||{Bucket, _Data} <- Buckets], lists:min([3, length([ Node ||{Node, NState}<- NewPeers, NState =:= 'UP'])])),
+	NewBucketData = [{Bucket, {NewEpoch, Blist}} || {Bucket, Blist} <- RebalancedBuckets],
+	NewLocalBuckets = localBucketTransform(dnode(), NewBucketData),
+	{noreply, State#state{buckets=NewBucketData, localBuckets=NewLocalBuckets, peers=NewPeers, epoch=NewEpoch}}.
 
 % node left
 expire(Node, #state{peers=Peers, epoch=Epoch} = State) ->
