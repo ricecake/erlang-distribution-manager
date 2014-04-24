@@ -1,4 +1,4 @@
--module(dman_sup).
+-module(dman_management_sup).
 
 -behaviour(supervisor).
 
@@ -23,4 +23,4 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-	{ok, { {one_for_one, 5, 10}, [?CHILD(dman_srv, worker), ?CHILD(dman_worker_sup, supervisor), ?CHILD(hash_ring,worker), ?CHILD(dman_management_sup, supervisor)]} }.
+	{ok, { {one_for_all, 5, 10}, [?CHILD(dman_router, worker), ?CHILD(dman_transfer_sup, supervisor)]} }.
