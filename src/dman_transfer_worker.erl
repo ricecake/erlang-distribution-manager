@@ -6,7 +6,7 @@
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([start_link/0]).
+-export([start_link/1]).
 
 %% ------------------------------------------------------------------
 %% gen_fsm Function Exports
@@ -20,14 +20,14 @@
 %% API Function Definitions
 %% ------------------------------------------------------------------
 
-start_link() ->
-    gen_fsm:start_link(?MODULE, [], []).
+start_link(Source) ->
+    gen_fsm:start_link(?MODULE, Source, []).
 
 %% ------------------------------------------------------------------
 %% gen_fsm Function Definitions
 %% ------------------------------------------------------------------
 
-init(_Args) ->
+init({Bucket, Node} = Source) ->
     {ok, initial_state_name, initial_state}.
 
 state_name(_Event, State) ->
