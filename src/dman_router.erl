@@ -179,7 +179,7 @@ handleNewNodes(NewNodes, #state{epoch=Epoch, peers=Peers, localBuckets=LBuckets,
 	RebalancedBuckets = balanceBuckets(LBuckets, lists:min([3, length([ Node ||{Node, NState}<-Peers, NState =:= 'UP'])])),
 	NewBucketData = lists:foldl(fun({Bucket, Blist}, List) -> lists:keystore(Bucket, 1, List, {Bucket, {Epoch+1, Blist}}) end, BucketData, RebalancedBuckets),
 	NewLocalBuckets = localBucketTransform(dnode(), NewBucketData),
-	io:format("gotBuckets: ~p~n", [listDifference(NewLocalBuckets, LBuckets)]),
+	ok = transferData(NewLocalBuckets, LBuckets, BucketData, NewBucketData),
 	State#state{epoch=Epoch+1, buckets=NewBucketData, localBuckets=NewLocalBuckets}.
 
 
@@ -223,3 +223,8 @@ getSystemStatus() ->
 % essentiall, calculate list difference on the set of local buckets, and then look up what
 % nodes have those buckets now, and compare that to what we used to know was the ownership of 
 % each bucket.  so list difference on local nodes, and then list difference on bucket nodes.
+
+transferData(NewBuckets, OldBuckets, _NewBucketData, _OldBucketData) -> 
+	GainedBuckets =  listDifference(NewBuckets, OlDBuckets),
+	io:format("gotBuckets: ~p~n", [GainedBuckets]),
+	ok.
