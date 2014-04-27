@@ -55,7 +55,7 @@ init([]) ->
 	hash_ring:create_ring(<<"nodes">>, 64, ?HASH_RING_FUNCTION_MD5),
 	hash_ring:add_node(<<"nodes">>, dnode()),
 	NodeState = {node(), {0, [{buckets, Buckets}, {peers, [{node(), 'UP'}]}, {systems, []}]}},
-	{ok, #state{stateData=[NodeState], peers=[{node(), 'UP'}], localBuckets=Buckets, buckets=[{Bucket, {0, [node()]}} || Bucket <- Buckets] }}.
+	{ok, #state{stateData=[NodeState], peers=[{node(), 'UP'}], localBuckets=Buckets, buckets=[{Bucket, {0, [dnode()]}} || Bucket <- Buckets] }}.
 
 % how often do we want to send a message? in milliseconds.
 gossip_freq(State) ->
@@ -145,7 +145,7 @@ join([SNode|_] = Nodelist, #state{peers=Peers} = State) ->
         RebalancedBuckets = balanceBuckets([Bucket||{Bucket, _Data} <- Buckets], lists:min([3, length([ Node ||{Node, NState}<- NewPeers, NState =:= 'UP'])])),
 	NewBucketData = [{Bucket, {NewEpoch, Blist}} || {Bucket, Blist} <- RebalancedBuckets],
 	NewLocalBuckets = localBucketTransform(dnode(), NewBucketData),
-	ok = transferData(NewLocalBuckets, [], NewBucketData, Buckets),
+	ok = transferData(NewLocalBuckets, [], NewBucketData, Buckets, NewPeers),
 	{noreply, State#state{buckets=NewBucketData, localBuckets=NewLocalBuckets, peers=NewPeers, epoch=NewEpoch}}.
 
 % node left
@@ -188,7 +188,7 @@ handleNewNodes(NewNodes, #state{epoch=Epoch, peers=Peers, localBuckets=LBuckets,
 	RebalancedBuckets = balanceBuckets(LBuckets, lists:min([3, length([ Node ||{Node, NState}<-Peers, NState =:= 'UP'])])),
 	NewBucketData = lists:foldl(fun({Bucket, Blist}, List) -> lists:keystore(Bucket, 1, List, {Bucket, {Epoch+1, Blist}}) end, BucketData, RebalancedBuckets),
 	NewLocalBuckets = localBucketTransform(dnode(), NewBucketData),
-	ok = transferData(NewLocalBuckets, LBuckets, NewBucketData, BucketData),
+	ok = transferData(NewLocalBuckets, LBuckets, NewBucketData, BucketData, Peers),
 	State#state{epoch=Epoch+1, buckets=NewBucketData, localBuckets=NewLocalBuckets}.
 
 
@@ -237,11 +237,21 @@ extractBucketNodes(Bucket, BucketData) ->
 % nodes have those buckets now, and compare that to what we used to know was the ownership of 
 % each bucket.  so list difference on local nodes, and then list difference on bucket nodes.
 
-transferData(NewBuckets, OldBuckets, NewBucketData, OldBucketData) -> 
+transferData(NewBuckets, OldBuckets, NewBucketData, OldBucketData, Peers) -> 
 	GainedBuckets =  listDifference(NewBuckets, OldBuckets),
 	Me = dnode(),
 	Sources = [{Bucket, 
 			lists:delete(Me, listStaticElements(extractBucketNodes(Bucket, NewBucketData), extractBucketNodes(Bucket, OldBucketData)))}
 		||Bucket <- GainedBuckets],
-	io:format("gotBuckets: ~p~nfrom: ~p~n", [GainedBuckets, Sources]),
+	ValidSources = [
+		{Bucket, lists:filter(
+				fun(Node)->
+					case proplists:get_value(binary_to_atom(Node, latin1), Peers, 'DOWN') of 
+						'DOWN' -> false;
+						'UP'   -> true
+					end
+				end,
+				NodeList)}
+	|| {Bucket, NodeList} <- Sources],
+	io:format("gotBuckets: ~p~nfrom: ~p~n", [GainedBuckets, ValidSources]),
 	ok.
