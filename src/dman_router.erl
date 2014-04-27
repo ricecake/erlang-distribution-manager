@@ -145,6 +145,7 @@ join([SNode|_] = Nodelist, #state{peers=Peers} = State) ->
         RebalancedBuckets = balanceBuckets([Bucket||{Bucket, _Data} <- Buckets], lists:min([3, length([ Node ||{Node, NState}<- NewPeers, NState =:= 'UP'])])),
 	NewBucketData = [{Bucket, {NewEpoch, Blist}} || {Bucket, Blist} <- RebalancedBuckets],
 	NewLocalBuckets = localBucketTransform(dnode(), NewBucketData),
+	ok = transferData(NewLocalBuckets, [], NewBucketData, Buckets),
 	{noreply, State#state{buckets=NewBucketData, localBuckets=NewLocalBuckets, peers=NewPeers, epoch=NewEpoch}}.
 
 % node left
@@ -172,6 +173,14 @@ mergeList(MyList, FList) ->
 
 listDifference(MyNodes, TheirNodes) -> 
 	lists:usort(fun(A, B)-> B>=A end, sets:to_list(sets:subtract(sets:from_list(MyNodes), sets:from_list(TheirNodes)))).
+listStaticElements(MyNodes, TheirNodes) ->
+	New = sets:from_list(MyNodes),
+	Old = sets:from_list(TheirNodes),
+	All = sets:union(New, Old),
+	Both= sets:intersection(New, Old),
+	Static = sets:union(sets:subtract(All, Old), Both),
+	lists:usort(fun(A, B)-> B>=A end, sets:to_list(Static)).
+
 
 handleNewNodes(NewNodes, #state{epoch=Epoch, peers=Peers, localBuckets=LBuckets, buckets=BucketData} = State) ->
 	[hash_ring:add_node(<<"nodes">>, dnode(Node)) || {Node, NState} <- NewNodes, NState =:= 'UP'],
@@ -179,7 +188,7 @@ handleNewNodes(NewNodes, #state{epoch=Epoch, peers=Peers, localBuckets=LBuckets,
 	RebalancedBuckets = balanceBuckets(LBuckets, lists:min([3, length([ Node ||{Node, NState}<-Peers, NState =:= 'UP'])])),
 	NewBucketData = lists:foldl(fun({Bucket, Blist}, List) -> lists:keystore(Bucket, 1, List, {Bucket, {Epoch+1, Blist}}) end, BucketData, RebalancedBuckets),
 	NewLocalBuckets = localBucketTransform(dnode(), NewBucketData),
-	ok = transferData(NewLocalBuckets, LBuckets, BucketData, NewBucketData),
+	ok = transferData(NewLocalBuckets, LBuckets, NewBucketData, BucketData),
 	State#state{epoch=Epoch+1, buckets=NewBucketData, localBuckets=NewLocalBuckets}.
 
 
@@ -219,12 +228,20 @@ getSystemStatus() ->
 	Alarms = {alarms, alarm_handler:get_alarms()},
 	[Cpu, Mem, Disk, Alarms].
 
+extractBucketNodes(Bucket, BucketData) ->
+	{_Epoch, Nodes} = proplists:get_value(Bucket, BucketData, {0, []}),
+	Nodes.
+
 % this is where I will put a function that tells us what node we lost what buckets too.
 % essentiall, calculate list difference on the set of local buckets, and then look up what
 % nodes have those buckets now, and compare that to what we used to know was the ownership of 
 % each bucket.  so list difference on local nodes, and then list difference on bucket nodes.
 
-transferData(NewBuckets, OldBuckets, _NewBucketData, _OldBucketData) -> 
-	GainedBuckets =  listDifference(NewBuckets, OlDBuckets),
-	io:format("gotBuckets: ~p~n", [GainedBuckets]),
+transferData(NewBuckets, OldBuckets, NewBucketData, OldBucketData) -> 
+	GainedBuckets =  listDifference(NewBuckets, OldBuckets),
+	Me = dnode(),
+	Sources = [{Bucket, 
+			lists:delete(Me, listStaticElements(extractBucketNodes(Bucket, NewBucketData), extractBucketNodes(Bucket, OldBucketData)))}
+		||Bucket <- GainedBuckets],
+	io:format("gotBuckets: ~p~nfrom: ~p~n", [GainedBuckets, Sources]),
 	ok.
