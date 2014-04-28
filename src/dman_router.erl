@@ -253,5 +253,6 @@ transferData(NewBuckets, OldBuckets, NewBucketData, OldBucketData, Peers) ->
 				end,
 				NodeList)}
 	|| {Bucket, NodeList} <- Sources],
+	[dman_transfer_sup:transfer(DataSpec) || DataSpec <- ValidSources],
 	io:format("gotBuckets: ~p~nfrom: ~p~n", [GainedBuckets, ValidSources]),
 	ok.
