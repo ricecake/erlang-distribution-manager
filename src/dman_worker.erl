@@ -6,7 +6,7 @@
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([start_link/1, behaviour_info/1]).
+-export([start_link/3, behaviour_info/1]).
 
 -export([add_task/2, remove_task/2, list_tasks/3, get_status/3, add_cohort/2, remove_cohort/2, call/3, cast/2]).
 %% ------------------------------------------------------------------
@@ -20,8 +20,8 @@
 %% API Function Definitions
 %% ------------------------------------------------------------------
 
-start_link(Args) ->
-    gen_server:start_link(?MODULE, Args, []).
+start_link(Module, Args, Options) ->
+    gen_server:start_link(Module, Args, Options).
 
 
 behaviour_info(callbacks) -> 
@@ -32,8 +32,7 @@ behaviour_info(callbacks) ->
 
 		{handle_status, 2},
 
-		{handle_add_cohort, 2},
-		{handle_remove_cohort,2},
+		{handle_quorum_change, 2},
 
 		{init, 2},
 		{terminate,2},
@@ -78,4 +77,3 @@ code_change(_OldVsn, State, _Extra) ->
 %% ------------------------------------------------------------------
 %% Internal Function Definitions
 %% ------------------------------------------------------------------
-
