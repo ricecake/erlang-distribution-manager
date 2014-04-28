@@ -27,7 +27,7 @@ start_link(Source) ->
 %% gen_fsm Function Definitions
 %% ------------------------------------------------------------------
 
-init({Bucket, Node} = Source) ->
+init({Bucket, Nodes} = Source) ->
     {ok, initial_state_name, initial_state}.
 
 state_name(_Event, State) ->
