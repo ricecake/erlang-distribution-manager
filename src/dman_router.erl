@@ -233,14 +233,30 @@ extractBucketNodes(Bucket, BucketData) ->
 	Nodes.
 
 
-getNodeForBucket(_Node) -> ok.
-getBucketForKey(_Bucket) -> ok.
-addRingNode(_node) -> ok.
-addRingBucket(_node) -> ok.
-delRingNode(_node) -> ok.
-delRingBucket(_node) -> ok.
-initRingNode(_node) -> ok.
-initRingBucket(_node) -> ok.
+getNodeForBucket(Bucket) ->
+	{ok, Node} = hash_ring:find_node(<<"nodes">>, binary:encode_unsigned(Bucket)),
+	binary_to_atom(Node, latin1).
+getNodeForBucket(Prefix, Bucket) ->
+	{ok, Node} = hash_ring:find_node(<<"nodes">>, << (binary:encode_unsigned(Prefix))/bits, (binary:encode_unsigned(Bucket))/bits>>),
+	binary_to_atom(Node, latin1).
+
+getBucketForKey(Key) when is_binary(Key) ->
+	{ok, Bucket} = hash_ring:find_node(<<"nodes">>, Key),
+	binary:decode_unsigned(Bucket).
+
+addRingNode(Node) -> hash_ring:add_node(<<"nodes">>, dnode(Node)).
+
+addRingBucket(Bucket) when is_integer(Bucket) -> addRingBucket(binary:encode_unsigned(Bucket));
+addRingBucket(Bucket) when is_binary(Bucket) -> hash_ring:add_node(<<"buckets">>, Bucket).
+
+delRingNode(Node) -> hash_ring:remove_node(<<"nodes">>, dnode(Node)).
+
+delRingBucket(Bucket) when is_integer(Bucket) -> delRingBucket(binary:encode_unsigned(Bucket));
+delRingBucket(Bucket) when is_binary(Bucket) -> hash_ring:remove_node(<<"buckets">>, Bucket).
+
+initRingNode() -> hash_ring:create_ring(<<"nodes">>, 64, ?HASH_RING_FUNCTION_MD5), ok.
+initRingBucket() -> hash_ring:create_ring(<<"buckets">>, 256, ?HASH_RING_FUNCTION_MD5), ok.
+
 
 % this is where I will put a function that tells us what node we lost what buckets too.
 % essentiall, calculate list difference on the set of local buckets, and then look up what
