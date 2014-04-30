@@ -235,6 +235,13 @@ extractBucketNodes(Bucket, BucketData) ->
 
 getNodeForBucket(_Node) -> ok.
 getBucketForKey(_Bucket) -> ok.
+addRingNode(_node) -> ok.
+addRingBucket(_node) -> ok.
+delRingNode(_node) -> ok.
+delRingBucket(_node) -> ok.
+initRingNode(_node) -> ok.
+initRingBucket(_node) -> ok.
+
 % this is where I will put a function that tells us what node we lost what buckets too.
 % essentiall, calculate list difference on the set of local buckets, and then look up what
 % nodes have those buckets now, and compare that to what we used to know was the ownership of 
