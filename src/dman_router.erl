@@ -194,6 +194,7 @@ handleNewNodes(NewNodes, #state{epoch=Epoch, peers=Peers, localBuckets=LBuckets,
 
 balanceBuckets(Buckets, Count) ->
 	[buildBucketList(Bucket, Count, 0, [], 0) || Bucket <- Buckets].
+
 buildBucketList(Bucket, Needs, Has, Accum, _Index) when Needs == Has -> {Bucket, Accum};
 buildBucketList(Bucket, Needs, _Has, Accum, Index) -> 
 	{ok, Node} = hash_ring:find_node(<<"nodes">>, << (binary:encode_unsigned(Index))/bits, Bucket/bits>>),
@@ -217,6 +218,7 @@ localBucketTransform(TopicNode, NewBucketData) ->
 	end.
 
 dnode() -> dnode(node()).
+
 dnode(Node) when is_binary(Node) -> Node;
 dnode(Node) when is_pid(Node) -> node(Node);
 dnode(Node) when is_atom(Node) -> erlang:atom_to_binary(Node, latin1).
@@ -236,6 +238,7 @@ extractBucketNodes(Bucket, BucketData) ->
 getNodeForBucket(Bucket) ->
 	{ok, Node} = hash_ring:find_node(<<"nodes">>, binary:encode_unsigned(Bucket)),
 	binary_to_atom(Node, latin1).
+
 getNodeForBucket(Prefix, Bucket) ->
 	{ok, Node} = hash_ring:find_node(<<"nodes">>, << (binary:encode_unsigned(Prefix))/bits, (binary:encode_unsigned(Bucket))/bits>>),
 	binary_to_atom(Node, latin1).
