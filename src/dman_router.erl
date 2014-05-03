@@ -196,7 +196,7 @@ balanceBuckets(Buckets, Count) ->
 
 buildBucketList(Bucket, Needs, Has, Accum, _Index) when Needs == Has -> {Bucket, Accum};
 buildBucketList(Bucket, Needs, _Has, Accum, Index) -> 
-	{ok, Node} = hash_ring:find_node(<<"nodes">>, << (binary:encode_unsigned(Index))/bits, Bucket/bits>>),
+	Node = getNodeForBucket(Index, Bucket),
 	NewList = lists:usort([Node|Accum]),
 	buildBucketList(Bucket, Needs, length(NewList), NewList, Index+1).
 
