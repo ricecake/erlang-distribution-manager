@@ -274,7 +274,7 @@ transferData(NewBuckets, OldBuckets, NewBucketData, OldBucketData, Peers) ->
 	ValidSources = [
 		{Bucket, lists:filter(
 				fun(Node)->
-					case proplists:get_value(binary_to_atom(Node, latin1), Peers, 'DOWN') of 
+					case proplists:get_value(Node, Peers, 'DOWN') of 
 						'DOWN' -> false;
 						'UP'   -> true
 					end
