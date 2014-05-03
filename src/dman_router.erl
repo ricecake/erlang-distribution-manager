@@ -49,13 +49,12 @@ attach(Node) when is_atom(Node) ->
 %%%===================================================================
 
 init([]) ->
-	hash_ring:create_ring(<<"buckets">>, 256, ?HASH_RING_FUNCTION_MD5),
-	Buckets = [binary:encode_unsigned(Bucket) || Bucket <- lists:seq(0,32)],
-	[hash_ring:add_node(<<"buckets">>, Bucket) || Bucket <- Buckets],
-	hash_ring:create_ring(<<"nodes">>, 64, ?HASH_RING_FUNCTION_MD5),
-	hash_ring:add_node(<<"nodes">>, dnode()),
+	initRingBucket(),
+	initRingNode(),
+	Buckets = [addRingBucket(Bucket) || Bucket <- lists:seq(0,32)],
+	addRingNode(node()),
 	NodeState = {node(), {0, [{buckets, Buckets}, {peers, [{node(), 'UP'}]}, {systems, []}]}},
-	{ok, #state{stateData=[NodeState], peers=[{node(), 'UP'}], localBuckets=Buckets, buckets=[{Bucket, {0, [dnode()]}} || Bucket <- Buckets] }}.
+	{ok, #state{stateData=[NodeState], peers=[{node(), 'UP'}], localBuckets=Buckets, buckets=[{Bucket, {0, [node()]}} || Bucket <- Buckets] }}.
 
 % how often do we want to send a message? in milliseconds.
 gossip_freq(State) ->
@@ -247,10 +246,10 @@ getBucketForKey(Key) when is_binary(Key) ->
 	{ok, Bucket} = hash_ring:find_node(<<"nodes">>, Key),
 	binary:decode_unsigned(Bucket).
 
-addRingNode(Node) -> hash_ring:add_node(<<"nodes">>, dnode(Node)).
+addRingNode(Node) -> hash_ring:add_node(<<"nodes">>, dnode(Node)), Node.
 
 addRingBucket(Bucket) when is_integer(Bucket) -> addRingBucket(binary:encode_unsigned(Bucket));
-addRingBucket(Bucket) when is_binary(Bucket) -> hash_ring:add_node(<<"buckets">>, Bucket).
+addRingBucket(Bucket) when is_binary(Bucket) -> hash_ring:add_node(<<"buckets">>, Bucket), binary:decode_unsigned(Bucket).
 
 delRingNode(Node) -> hash_ring:remove_node(<<"nodes">>, dnode(Node)).
 
