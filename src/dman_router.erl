@@ -140,7 +140,7 @@ checkDowned({Node, 'DOWN'}, MyState, NewState) ->
 join([SNode|_] = Nodelist, #state{peers=Peers} = State) ->
 	NewPeers = lists:foldl(fun(Node, List)-> lists:keystore(Node, 1, List, {Node, 'UP'}) end, Peers, Nodelist),
 	{NewEpoch, Buckets} = gen_gossip:call({dman_router, SNode}, bootstrap),
-        [hash_ring:add_node(<<"nodes">>, dnode(Node)) || {Node, NState} <- NewPeers, NState =:= 'UP'],
+        [addRingNode(Node) || {Node, NState} <- NewPeers, NState =:= 'UP'],
         RebalancedBuckets = balanceBuckets([Bucket||{Bucket, _Data} <- Buckets], lists:min([3, length([ Node ||{Node, NState}<- NewPeers, NState =:= 'UP'])])),
 	NewBucketData = [{Bucket, {NewEpoch, Blist}} || {Bucket, Blist} <- RebalancedBuckets],
 	NewLocalBuckets = localBucketTransform(dnode(), NewBucketData),
@@ -182,8 +182,8 @@ listStaticElements(MyNodes, TheirNodes) ->
 
 
 handleNewNodes(NewNodes, #state{epoch=Epoch, peers=Peers, localBuckets=LBuckets, buckets=BucketData} = State) ->
-	[hash_ring:add_node(<<"nodes">>, dnode(Node)) || {Node, NState} <- NewNodes, NState =:= 'UP'],
-	[hash_ring:remove_node(<<"nodes">>, dnode(Node)) || {Node, NState} <- NewNodes, NState =:= 'DOWN'],
+	[addRingNode(Node) || {Node, NState} <- NewNodes, NState =:= 'UP'],
+	[delRingNode(Node) || {Node, NState} <- NewNodes, NState =:= 'DOWN'],
 	RebalancedBuckets = balanceBuckets(LBuckets, lists:min([3, length([ Node ||{Node, NState}<-Peers, NState =:= 'UP'])])),
 	NewBucketData = lists:foldl(fun({Bucket, Blist}, List) -> lists:keystore(Bucket, 1, List, {Bucket, {Epoch+1, Blist}}) end, BucketData, RebalancedBuckets),
 	NewLocalBuckets = localBucketTransform(dnode(), NewBucketData),
