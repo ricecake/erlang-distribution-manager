@@ -143,7 +143,7 @@ join([SNode|_] = Nodelist, #state{peers=Peers} = State) ->
         [addRingNode(Node) || {Node, NState} <- NewPeers, NState =:= 'UP'],
         RebalancedBuckets = balanceBuckets([Bucket||{Bucket, _Data} <- Buckets], lists:min([3, length([ Node ||{Node, NState}<- NewPeers, NState =:= 'UP'])])),
 	NewBucketData = [{Bucket, {NewEpoch, Blist}} || {Bucket, Blist} <- RebalancedBuckets],
-	NewLocalBuckets = localBucketTransform(dnode(), NewBucketData),
+	NewLocalBuckets = localBucketTransform(node(), NewBucketData),
 	ok = transferData(NewLocalBuckets, [], NewBucketData, Buckets, NewPeers),
 	{noreply, State#state{buckets=NewBucketData, localBuckets=NewLocalBuckets, peers=NewPeers, epoch=NewEpoch}}.
 
@@ -186,7 +186,7 @@ handleNewNodes(NewNodes, #state{epoch=Epoch, peers=Peers, localBuckets=LBuckets,
 	[delRingNode(Node) || {Node, NState} <- NewNodes, NState =:= 'DOWN'],
 	RebalancedBuckets = balanceBuckets(LBuckets, lists:min([3, length([ Node ||{Node, NState}<-Peers, NState =:= 'UP'])])),
 	NewBucketData = lists:foldl(fun({Bucket, Blist}, List) -> lists:keystore(Bucket, 1, List, {Bucket, {Epoch+1, Blist}}) end, BucketData, RebalancedBuckets),
-	NewLocalBuckets = localBucketTransform(dnode(), NewBucketData),
+	NewLocalBuckets = localBucketTransform(node(), NewBucketData),
 	ok = transferData(NewLocalBuckets, LBuckets, NewBucketData, BucketData, Peers),
 	State#state{epoch=Epoch+1, buckets=NewBucketData, localBuckets=NewLocalBuckets}.
 
@@ -208,7 +208,6 @@ findNewNodes(MyState, TheirState) ->
 extractPeers(NewState) ->
 		lists:usort([ Node || {Node, _status} <-lists:flatten([proplists:get_all_values(peers, List) || List <-[Properties || {_, {_, Properties}} <- NewState]])]).
 
-localBucketTransform(TopicNode, NewBucketData) when is_atom(TopicNode)-> localBucketTransform(dnode(TopicNode), NewBucketData);
 localBucketTransform(TopicNode, NewBucketData) ->
 	Transformed = lists:foldl(fun({Node, Bucket}, Dict)-> dict:append(Node, Bucket, Dict) end, dict:new(), lists:flatten([ [{Node, Bucket} || Node <- NodeList] || {Bucket, {_Epoch, NodeList}} <- NewBucketData])),
 	case dict:find(TopicNode, Transformed) of
@@ -267,7 +266,7 @@ initRingBucket() -> hash_ring:create_ring(<<"buckets">>, 256, ?HASH_RING_FUNCTIO
 
 transferData(NewBuckets, OldBuckets, NewBucketData, OldBucketData, Peers) -> 
 	GainedBuckets =  listDifference(NewBuckets, OldBuckets),
-	Me = dnode(),
+	Me = node(),
 	Sources = [{Bucket, 
 			lists:delete(Me, listStaticElements(extractBucketNodes(Bucket, NewBucketData), extractBucketNodes(Bucket, OldBucketData)))}
 		||Bucket <- GainedBuckets],
