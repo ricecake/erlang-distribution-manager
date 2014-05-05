@@ -2,7 +2,7 @@
 -behaviour(gen_gossip).
 
 %% api
--export([start_link/0, handle_call/3, handle_cast/2, code_change/3, attach/1]).
+-export([start_link/0, handle_call/3, handle_cast/2, code_change/3, attach/1, dumpState/0]).
 
 %% gen_gossip callbacks
 -export([init/1,
@@ -43,6 +43,12 @@ start_link() ->
 
 attach(Node) when is_atom(Node) ->
 	gen_gossip:cast(dman_router, {attach, Node}).
+
+dumpState() ->
+	gen_gossip:cast(dman_router, {debug, self()}),
+	receive
+		Message -> io:format("~p~n", [Message])
+	end.
 
 %%%===================================================================
 %%% gen_gossip callbacks
@@ -252,7 +258,7 @@ getNodeForBucket(Prefix, Bucket) ->
 	binary_to_atom(Node, latin1).
 
 getBucketForKey(Key) when is_binary(Key) ->
-	{ok, Bucket} = hash_ring:find_node(<<"nodes">>, Key),
+	{ok, Bucket} = hash_ring:find_node(<<"buckets">>, Key),
 	binary:decode_unsigned(Bucket).
 
 addRingNode(Node) -> hash_ring:add_node(<<"nodes">>, dnode(Node)), Node.
