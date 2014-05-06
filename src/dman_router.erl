@@ -92,6 +92,7 @@ handle_cast({attach, SNode}, State) ->
 
 handle_cast({add, {Key, _JobDetails} = Job}, #state{buckets=Buckets} = State) ->
 	Bucket = getBucketForKey(Key),
+	io:format("Bucket: ~p~n",[Bucket]),
 	{_epoch, Nodes}  = proplists:get_value(Bucket, Buckets),
 	[gen_gossip:cast({dman_router, Node}, {do_add, Job}) || Node <- Nodes],
 	{noreply, State};
@@ -251,18 +252,18 @@ getNodeForBucket(Prefix, Bucket) ->
 	binary_to_atom(Node, latin1).
 
 getBucketForKey(Key) when is_binary(Key) ->
-	{ok, Bucket} = hash_ring:find_node(<<"buckets">>, Key),
+	{ok, <<"B", Bucket/bits>>} = hash_ring:find_node(<<"buckets">>, Key),
 	binary:decode_unsigned(Bucket).
 
 addRingNode(Node) -> hash_ring:add_node(<<"nodes">>, dnode(Node)), Node.
 
 addRingBucket(Bucket) when is_integer(Bucket) -> addRingBucket(binary:encode_unsigned(Bucket));
-addRingBucket(Bucket) when is_binary(Bucket) -> hash_ring:add_node(<<"buckets">>, Bucket), binary:decode_unsigned(Bucket).
+addRingBucket(Bucket) when is_binary(Bucket) -> hash_ring:add_node(<<"buckets">>, <<"B", Bucket/bits>>), binary:decode_unsigned(Bucket).
 
 delRingNode(Node) -> hash_ring:remove_node(<<"nodes">>, dnode(Node)).
 
 delRingBucket(Bucket) when is_integer(Bucket) -> delRingBucket(binary:encode_unsigned(Bucket));
-delRingBucket(Bucket) when is_binary(Bucket) -> hash_ring:remove_node(<<"buckets">>, Bucket).
+delRingBucket(Bucket) when is_binary(Bucket) -> hash_ring:remove_node(<<"buckets">>, <<"B", Bucket/bits>>).
 
 initRingNode() -> hash_ring:create_ring(<<"nodes">>, 64, ?HASH_RING_FUNCTION_MD5), ok.
 initRingBucket() -> hash_ring:create_ring(<<"buckets">>, 256, ?HASH_RING_FUNCTION_MD5), ok.
