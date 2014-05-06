@@ -231,8 +231,6 @@ localBucketTransform(TopicNode, NewBucketData) ->
 		error         -> []
 	end.
 
-dnode() -> dnode(node()).
-
 dnode(Node) when is_binary(Node) -> Node;
 dnode(Node) when is_pid(Node) -> node(Node);
 dnode(Node) when is_atom(Node) -> erlang:atom_to_binary(Node, latin1).
@@ -247,11 +245,6 @@ getSystemStatus() ->
 extractBucketNodes(Bucket, BucketData) ->
 	{_Epoch, Nodes} = proplists:get_value(Bucket, BucketData, {0, []}),
 	Nodes.
-
-
-getNodeForBucket(Bucket) ->
-	{ok, Node} = hash_ring:find_node(<<"nodes">>, binary:encode_unsigned(Bucket)),
-	binary_to_atom(Node, latin1).
 
 getNodeForBucket(Prefix, Bucket) ->
 	{ok, Node} = hash_ring:find_node(<<"nodes">>, << (binary:encode_unsigned(Prefix))/bits, (binary:encode_unsigned(Bucket))/bits>>),
