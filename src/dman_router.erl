@@ -92,13 +92,12 @@ handle_cast({attach, SNode}, State) ->
 
 handle_cast({add, {Key, _JobDetails} = Job}, #state{buckets=Buckets} = State) ->
 	Bucket = getBucketForKey(Key),
-	io:format("Bucket: ~p~n",[Bucket]),
 	{_epoch, Nodes}  = proplists:get_value(Bucket, Buckets),
 	[gen_gossip:cast({dman_router, Node}, {do_add, Job}) || Node <- Nodes],
 	{noreply, State};
 
 handle_cast({do_add, {Key, {SubSystem, Details}}}, State) ->
-	io:format("Key: ~p~nSub: ~p~nDetails: ~p~n",[Key, SubSystem, Details]),
+	dman_worker:add_task(SubSystem, {Key, Details),
 	{noreply, State};
 	
 handle_cast(_Message, State) ->
