@@ -2,7 +2,7 @@
 -behaviour(gen_gossip).
 
 %% api
--export([start_link/0, handle_call/3, handle_cast/2, code_change/3, attach/1]).
+-export([start_link/0, handle_call/3, handle_cast/2, code_change/3, attach/1, dumpState/0]).
 
 %% gen_gossip callbacks
 -export([init/1,
@@ -44,6 +44,12 @@ start_link() ->
 attach(Node) when is_atom(Node) ->
 	gen_gossip:cast(dman_router, {attach, Node}).
 
+dumpState() ->
+	gen_gossip:cast(dman_router, {debug, self()}),
+	receive
+		Message -> io:format("~p~n", [Message])
+	end.
+
 %%%===================================================================
 %%% gen_gossip callbacks
 %%%===================================================================
@@ -84,14 +90,14 @@ handle_cast({attach, SNode}, State) ->
 	net_adm:ping(SNode),
 	{noreply, State};
 
-handle_cast({add, {Key, _JobDetails} = Job}, #state{buckets=Buckets} = State) ->
+handle_cast({add, {Key, {_SubSystem, _Details} = JobDetails}}, #state{buckets=Buckets} = State) ->
 	Bucket = getBucketForKey(Key),
 	{_epoch, Nodes}  = proplists:get_value(Bucket, Buckets),
-	[gen_gossip:cast({dman_router, Node}, {do_add, Job}) || Node <- Nodes],
+	[gen_gossip:cast({dman_router, Node}, {do_add, {Bucket, Key, JobDetails}) || Node <- Nodes],
 	{noreply, State};
 
-handle_cast({do_add, {Key, {SubSystem, Details}}}, State) ->
-	io:format("Key: ~p~nSub: ~p~nDetails: ~p~n",[Key, SubSystem, Details]),
+handle_cast({do_add, {Bucket, Key, {SubSystem, Details}}}, State) ->
+	dman_worker:add_task(SubSystem, {Key, Details),
 	{noreply, State};
 	
 handle_cast(_Message, State) ->
@@ -225,8 +231,6 @@ localBucketTransform(TopicNode, NewBucketData) ->
 		error         -> []
 	end.
 
-dnode() -> dnode(node()).
-
 dnode(Node) when is_binary(Node) -> Node;
 dnode(Node) when is_pid(Node) -> node(Node);
 dnode(Node) when is_atom(Node) -> erlang:atom_to_binary(Node, latin1).
@@ -242,28 +246,23 @@ extractBucketNodes(Bucket, BucketData) ->
 	{_Epoch, Nodes} = proplists:get_value(Bucket, BucketData, {0, []}),
 	Nodes.
 
-
-getNodeForBucket(Bucket) ->
-	{ok, Node} = hash_ring:find_node(<<"nodes">>, binary:encode_unsigned(Bucket)),
-	binary_to_atom(Node, latin1).
-
 getNodeForBucket(Prefix, Bucket) ->
 	{ok, Node} = hash_ring:find_node(<<"nodes">>, << (binary:encode_unsigned(Prefix))/bits, (binary:encode_unsigned(Bucket))/bits>>),
 	binary_to_atom(Node, latin1).
 
 getBucketForKey(Key) when is_binary(Key) ->
-	{ok, Bucket} = hash_ring:find_node(<<"nodes">>, Key),
+	{ok, <<"B", Bucket/bits>>} = hash_ring:find_node(<<"buckets">>, Key),
 	binary:decode_unsigned(Bucket).
 
 addRingNode(Node) -> hash_ring:add_node(<<"nodes">>, dnode(Node)), Node.
 
 addRingBucket(Bucket) when is_integer(Bucket) -> addRingBucket(binary:encode_unsigned(Bucket));
-addRingBucket(Bucket) when is_binary(Bucket) -> hash_ring:add_node(<<"buckets">>, Bucket), binary:decode_unsigned(Bucket).
+addRingBucket(Bucket) when is_binary(Bucket) -> hash_ring:add_node(<<"buckets">>, <<"B", Bucket/bits>>), binary:decode_unsigned(Bucket).
 
 delRingNode(Node) -> hash_ring:remove_node(<<"nodes">>, dnode(Node)).
 
 delRingBucket(Bucket) when is_integer(Bucket) -> delRingBucket(binary:encode_unsigned(Bucket));
-delRingBucket(Bucket) when is_binary(Bucket) -> hash_ring:remove_node(<<"buckets">>, Bucket).
+delRingBucket(Bucket) when is_binary(Bucket) -> hash_ring:remove_node(<<"buckets">>, <<"B", Bucket/bits>>).
 
 initRingNode() -> hash_ring:create_ring(<<"nodes">>, 64, ?HASH_RING_FUNCTION_MD5), ok.
 initRingBucket() -> hash_ring:create_ring(<<"buckets">>, 256, ?HASH_RING_FUNCTION_MD5), ok.
