@@ -21,7 +21,7 @@
 %% ------------------------------------------------------------------
 
 start_link(Module, Args, Options) ->
-    gen_server:start_link(Module, Args, Options).
+    gen_server:start_link({local, ?Module}, ?Module, {Module, Args}, Options).
 
 
 behaviour_info(callbacks) -> 
