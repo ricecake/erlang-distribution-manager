@@ -21,7 +21,7 @@
 %% ------------------------------------------------------------------
 
 start_link(Module, Args, Options) ->
-    gen_server:start_link({local, ?Module}, ?Module, {Module, Args}, Options).
+    gen_server:start_link({local, Module}, ?MODULE, {Module, Args}, Options).
 
 
 behaviour_info(callbacks) -> 
@@ -56,8 +56,11 @@ cast(_,_) -> undef.
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------
 
-init(Args) ->
-    {ok, Args}.
+-record(wstate, {module, moduleState}).
+
+init({Module, Args}) ->
+	{ok, MState} = apply(Module, init, Args),
+    {ok, #wstate{module=Module, moduleState=MState}}.
 
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
