@@ -43,7 +43,7 @@ behaviour_info(callbacks) ->
 	];
 behaviour_info(_Other) -> undefined.
 
-add_task(_,_) -> undef.
+add_task(System,Job) -> gen_server:call(System, {add, Job}).
 remove_task(_,_) -> undef.
 list_tasks(_,_,_) -> undef.
 get_status(_,_,_) -> undef.
@@ -62,6 +62,12 @@ init({Module, Args}) ->
 	{ok, MState} = apply(Module, init, Args),
     {ok, #wstate{module=Module, moduleState=MState}}.
 
+handle_call({add, Job}, _From, #wstate{module=Module, moduleState=MState} = State) ->
+	case apply(Module, handle_add, [Job, MState]) of
+		{ok, NewMState} -> {reply, ok, State#wstate{moduleState=NewMState}};
+		{error, NewMState} -> {reply, error, State#wstate{moduleState=NewMState}};
+		Other -> {stop, Other, State}
+	end;
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
