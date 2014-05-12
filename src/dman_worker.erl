@@ -56,7 +56,7 @@ cast(_,_) -> undef.
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------
 
--record(wstate, {module, moduleState}).
+-record(wstate, {module, moduleState, listState=ready, listToken=null}).
 
 init({Module, Args}) ->
 	{ok, MState} = apply(Module, init, Args),
