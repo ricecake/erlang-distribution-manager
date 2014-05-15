@@ -34,7 +34,7 @@ behaviour_info(callbacks) ->
 
 		{handle_quorum_change, 2},
 
-		{init, 2},
+		{init, 1},
 		{terminate,2},
 		{code_change,3},
 		{handle_call,3},
