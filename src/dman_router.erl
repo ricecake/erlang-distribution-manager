@@ -72,7 +72,7 @@ digest(#state{epoch=Epoch, localBuckets=Buckets, buckets=BucketData, peers=Peers
 	HandleToken = push,
 	NodeState = {node(), {NewEpoch, [{buckets, Buckets}, {peers, Peers}, {system, getSystemStatus()}]}},
 	NewStateData = lists:keystore(node(), 1, StateData, NodeState),
-	{reply, {NewEpoch, NewStateData, BucketData}, HandleToken, State#state{epoch=NewEpoch, stateData=NewStateData, peers=Peers}}.
+	{reply, {NewEpoch, NewStateData, BucketData, dman_worker_sup:list()}, HandleToken, State#state{epoch=NewEpoch, stateData=NewStateData, peers=Peers}}.
 
 handle_cast({debug, Node}, State) ->
 	Node! State,
@@ -104,19 +104,19 @@ handle_cast(_Message, State) ->
 	{noreply, State}.
 
 handle_call(bootstrap, _From, #state{buckets=Buckets, epoch=Epoch} = State) ->
-	{reply, {Epoch, Buckets}, State};
+	{reply, {Epoch, Buckets, dman_worker_sup:list()}, State};
 
 handle_call(_Request, _From, State) ->
 	{noreply, State}.
 % received a push
 handle_gossip(push, TheirState, _From, #state{epoch=MyEpoch, peers=Peers, stateData=MyStateData, buckets=MyBuckets} = State) ->
-	MergedState = mergeState({MyEpoch, MyStateData, MyBuckets}, TheirState),
-	{NewEpoch, NewState, NewBuckets} = MergedState,
+	MergedState = mergeState({MyEpoch, MyStateData, MyBuckets, dman_worker_sup:list()}, TheirState),
+	{NewEpoch, NewState, NewBuckets, NewWorkers} = MergedState,
 	NewPeers = rectifyPeerList(Peers, MyStateData, NewState),
 	{reply, MergedState, pull, State#state{epoch=NewEpoch, peers=NewPeers, stateData=NewState, buckets=NewBuckets}};
 
 % received a symmetric push
-handle_gossip(pull, {NewEpoch, NewState, NewBuckets}, _From, #state{stateData=MyStateData, peers=Peers} = State) ->
+handle_gossip(pull, {NewEpoch, NewState, NewBuckets, NewWorkers}, _From, #state{stateData=MyStateData, peers=Peers} = State) ->
 	NewPeers = rectifyPeerList(Peers, MyStateData, NewState),
 	{noreply, State#state{epoch=NewEpoch, peers=NewPeers, stateData=NewState, buckets=NewBuckets}}.
 
@@ -155,7 +155,7 @@ checkDowned({Node, 'DOWN'}, MyState, NewState) ->
 % joined cluster
 join([SNode|_] = Nodelist, #state{peers=Peers} = State) ->
 	NewPeers = lists:foldl(fun(Node, List)-> lists:keystore(Node, 1, List, {Node, 'UP'}) end, Peers, Nodelist),
-	{NewEpoch, Buckets} = gen_gossip:call({dman_router, SNode}, bootstrap),
+	{NewEpoch, Buckets, NewWorkers} = gen_gossip:call({dman_router, SNode}, bootstrap),
         [addRingNode(Node) || {Node, NState} <- NewPeers, NState =:= 'UP'],
         RebalancedBuckets = balanceBuckets([Bucket||{Bucket, _Data} <- Buckets], lists:min([3, length([ Node ||{Node, NState}<- NewPeers, NState =:= 'UP'])])),
 	NewBucketData = [{Bucket, {NewEpoch, Blist}} || {Bucket, Blist} <- RebalancedBuckets],
@@ -171,7 +171,7 @@ expire(Node, #state{peers=Peers, epoch=Epoch} = State) ->
 
 code_change(_Oldvsn, State, _Extra) -> {ok, State}.
 
-mergeState({MyEpoch, MyNodes, MyBuckets},{FEpoch, FNodes, FBuckets}) ->
+mergeState({MyEpoch, MyNodes, MyBuckets, MyWorkers},{FEpoch, FNodes, FBuckets, FWorkers}) ->
 	NewEpoch   = lists:max([MyEpoch, FEpoch])+1,
 	NewNodes   = mergeList(MyNodes,   FNodes),
 	NewBuckets = mergeList(MyBuckets, FBuckets),
