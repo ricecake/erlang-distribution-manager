@@ -3,7 +3,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, create/1, create/2]).
+-export([start_link/0, create/1, create/2, list/0]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -20,6 +20,8 @@ start_link() ->
 
 create(Module) -> create(Module, []).
 create(Module, Args) -> supervisor:start_child(?MODULE, ?CHILD(Module, Args)).
+
+list() -> [ Module ||{Module, _Pid, _Type, _Module} <- supervisor:which_children(?MODULE)]
 %% ===================================================================
 %% Supervisor callbacks
 %% ===================================================================
