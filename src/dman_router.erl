@@ -113,11 +113,13 @@ handle_gossip(push, TheirState, _From, #state{epoch=MyEpoch, peers=Peers, stateD
 	MergedState = mergeState({MyEpoch, MyStateData, MyBuckets, dman_worker_sup:list()}, TheirState),
 	{NewEpoch, NewState, NewBuckets, NewWorkers} = MergedState,
 	NewPeers = rectifyPeerList(Peers, MyStateData, NewState),
+	[ dman_worker_sup:create(Worker) || Worker <- NewWorkers ],
 	{reply, MergedState, pull, State#state{epoch=NewEpoch, peers=NewPeers, stateData=NewState, buckets=NewBuckets}};
 
 % received a symmetric push
 handle_gossip(pull, {NewEpoch, NewState, NewBuckets, NewWorkers}, _From, #state{stateData=MyStateData, peers=Peers} = State) ->
 	NewPeers = rectifyPeerList(Peers, MyStateData, NewState),
+	[ dman_worker_sup:create(Worker) || Worker <- NewWorkers ],
 	{noreply, State#state{epoch=NewEpoch, peers=NewPeers, stateData=NewState, buckets=NewBuckets}}.
 
 determineLiveness(Node) ->
@@ -160,6 +162,7 @@ join([SNode|_] = Nodelist, #state{peers=Peers} = State) ->
         RebalancedBuckets = balanceBuckets([Bucket||{Bucket, _Data} <- Buckets], lists:min([3, length([ Node ||{Node, NState}<- NewPeers, NState =:= 'UP'])])),
 	NewBucketData = [{Bucket, {NewEpoch, Blist}} || {Bucket, Blist} <- RebalancedBuckets],
 	NewLocalBuckets = localBucketTransform(node(), NewBucketData),
+	[ dman_worker_sup:create(Worker) || Worker <- NewWorkers ],
 	ok = transferData(NewLocalBuckets, [], NewBucketData, Buckets, NewPeers),
 	{noreply, State#state{buckets=NewBucketData, localBuckets=NewLocalBuckets, peers=NewPeers, epoch=NewEpoch}}.
 
@@ -172,10 +175,11 @@ expire(Node, #state{peers=Peers, epoch=Epoch} = State) ->
 code_change(_Oldvsn, State, _Extra) -> {ok, State}.
 
 mergeState({MyEpoch, MyNodes, MyBuckets, MyWorkers},{FEpoch, FNodes, FBuckets, FWorkers}) ->
+	NewWorkers = lists:umerge(MyWorkers, FWorkers),
 	NewEpoch   = lists:max([MyEpoch, FEpoch])+1,
 	NewNodes   = mergeList(MyNodes,   FNodes),
 	NewBuckets = mergeList(MyBuckets, FBuckets),
-	{NewEpoch, NewNodes, NewBuckets}.
+	{NewEpoch, NewNodes, NewBuckets, NewWorkers}.
 
 mergeList(MyList, FList) ->
 	Sort = fun({AName,{AEpoch, _AList}},{BName, {BEpoch, _BList}}) when AName == BName -> 

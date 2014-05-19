@@ -21,7 +21,7 @@ start_link() ->
 create(Module) -> create(Module, []).
 create(Module, Args) -> supervisor:start_child(?MODULE, ?CHILD(Module, Args)).
 
-list() -> [ Module ||{Module, _Pid, _Type, _Module} <- supervisor:which_children(?MODULE)].
+list() -> lists:sort([ Module ||{Module, _Pid, _Type, _Module} <- supervisor:which_children(?MODULE)]).
 %% ===================================================================
 %% Supervisor callbacks
 %% ===================================================================
