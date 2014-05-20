@@ -113,14 +113,21 @@ handle_gossip(push, TheirState, _From, #state{epoch=MyEpoch, peers=Peers, stateD
 	MergedState = mergeState({MyEpoch, MyStateData, MyBuckets, dman_worker_sup:list()}, TheirState),
 	{NewEpoch, NewState, NewBuckets, NewWorkers} = MergedState,
 	NewPeers = rectifyPeerList(Peers, MyStateData, NewState),
-	[ dman_worker_sup:create(Worker) || Worker <- NewWorkers ],
+	[ createWorker(Worker) || Worker <- NewWorkers ],
 	{reply, MergedState, pull, State#state{epoch=NewEpoch, peers=NewPeers, stateData=NewState, buckets=NewBuckets}};
 
 % received a symmetric push
 handle_gossip(pull, {NewEpoch, NewState, NewBuckets, NewWorkers}, _From, #state{stateData=MyStateData, peers=Peers} = State) ->
 	NewPeers = rectifyPeerList(Peers, MyStateData, NewState),
-	[ dman_worker_sup:create(Worker) || Worker <- NewWorkers ],
+	[ createWorker(Worker) || Worker <- NewWorkers ],
 	{noreply, State#state{epoch=NewEpoch, peers=NewPeers, stateData=NewState, buckets=NewBuckets}}.
+
+createWorker(Worker) ->
+	case dman_worker_sup:create(Worker) of
+		{ok, Pid} -> {Worker, Pid};
+		{error, {already_started, Pid}} -> {Worker, Pid};
+		{error, Error} -> {error, {Worker, Error}}
+	end.
 
 determineLiveness(Node) ->
 	case net_adm:ping(Node) of
@@ -162,7 +169,7 @@ join([SNode|_] = Nodelist, #state{peers=Peers} = State) ->
         RebalancedBuckets = balanceBuckets([Bucket||{Bucket, _Data} <- Buckets], lists:min([3, length([ Node ||{Node, NState}<- NewPeers, NState =:= 'UP'])])),
 	NewBucketData = [{Bucket, {NewEpoch, Blist}} || {Bucket, Blist} <- RebalancedBuckets],
 	NewLocalBuckets = localBucketTransform(node(), NewBucketData),
-	[ dman_worker_sup:create(Worker) || Worker <- NewWorkers ],
+	[ createWorker(Worker) || Worker <- NewWorkers ],
 	ok = transferData(NewLocalBuckets, [], NewBucketData, Buckets, NewPeers),
 	{noreply, State#state{buckets=NewBucketData, localBuckets=NewLocalBuckets, peers=NewPeers, epoch=NewEpoch}}.
 
