@@ -100,6 +100,10 @@ handle_cast({do_add, {Bucket, Key, {SubSystem, Details}}}, State) ->
 	dman_worker:add_task(SubSystem, {Bucket, Key, Details}),
 	{noreply, State};
 	
+handle_cast({sync, Worker}, State) ->
+	io:format("got sync request for ~p~n", [{Worker, State}]), 
+	{noreply, State};
+
 handle_cast(_Message, State) ->
 	{noreply, State}.
 
@@ -124,7 +128,8 @@ handle_gossip(pull, {NewEpoch, NewState, NewBuckets, NewWorkers}, _From, #state{
 
 createWorker(Worker) ->
 	case dman_worker_sup:create(Worker) of
-		{ok, Pid} -> {Worker, Pid};
+		{ok, Pid} -> gen_gossip:cast(self(), {sync, Worker}),
+			     {Worker, Pid};
 		{error, {already_started, Pid}} -> {Worker, Pid};
 		{error, Error} -> {error, {Worker, Error}}
 	end.
