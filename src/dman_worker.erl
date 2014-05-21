@@ -59,7 +59,7 @@ cast(_,_) -> undef.
 -record(wstate, {module, moduleState, listState=ready, listToken=null}).
 
 init({Module, Args}) ->
-	{ok, MState} = apply(Module, init, Args),
+	{ok, MState} = apply(Module, init, [Args]),
     {ok, #wstate{module=Module, moduleState=MState}}.
 
 handle_call({add, Job}, _From, #wstate{module=Module, moduleState=MState} = State) ->
