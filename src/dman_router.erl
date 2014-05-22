@@ -101,7 +101,7 @@ handle_cast({do_add, {Bucket, Key, {SubSystem, Details}}}, State) ->
 	{noreply, State};
 	
 handle_cast({sync, Worker}, State) ->
-	io:format("got sync request for ~p~n", [{Worker, State}]), 
+	io:format("got sync request for ~p~n", [Worker]), 
 	{noreply, State};
 
 handle_cast(_Message, State) ->
@@ -306,5 +306,5 @@ transferData(NewBuckets, OldBuckets, NewBucketData, OldBucketData, Peers) ->
 				NodeList)}
 	|| {Bucket, NodeList} <- Sources],
 	[dman_transfer_sup:transfer(DataSpec) || DataSpec <- ValidSources],
-	io:format("gotBuckets: ~p~nfrom: ~p~n", [GainedBuckets, ValidSources]),
+	io:format("gotBuckets: ~p~n", [GainedBuckets]),
 	ok.
