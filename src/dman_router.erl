@@ -96,6 +96,10 @@ handle_cast({add, {Key, {_SubSystem, _Details} = JobDetails}}, #state{buckets=Bu
 	[gen_gossip:cast({dman_router, Node}, {do_add, {Bucket, Key, JobDetails}}) || Node <- Nodes],
 	{noreply, State};
 
+handle_cast({add_all, {Key, {_SubSystem, _Details} = JobDetails}}, #state{peers = Peers} = State) ->
+	[gen_gossip:cast({dman_router, Node}, {do_add, {all, Key, JobDetails}}) || {Node, Status} <- Peers, Status =:= 'UP'],
+	{noreply, State};
+
 handle_cast({do_add, {Bucket, Key, {SubSystem, Details}}}, State) ->
 	dman_worker:add_task(SubSystem, {Bucket, Key, Details}),
 	{noreply, State};
